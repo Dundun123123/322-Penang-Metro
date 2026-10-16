@@ -2,12 +2,13 @@ import { eq } from "drizzle-orm";
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { getDb } from "@/db";
 import { reportEvents, reports } from "@/db/schema";
-import { jsonError, sha256, trim } from "@/lib/server";
+import { jsonError, readJsonObject, sameOrigin, sha256, trim } from "@/lib/server";
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const reference = trim(url.searchParams.get("reference"), 40).toUpperCase();
-  const accessCode = trim(url.searchParams.get("code"), 40).toUpperCase();
+export async function POST(request: Request) {
+  if (!sameOrigin(request)) return jsonError("Invalid origin", 403);
+  const input = await readJsonObject(request);
+  const reference = trim(input?.reference, 40).toUpperCase();
+  const accessCode = trim(input?.accessCode, 40).toUpperCase();
   if (!reference) return jsonError("Reference is required");
   const row = await getDb().select().from(reports).where(eq(reports.reference, reference)).limit(1);
   if (!row.length) return jsonError("Report not found", 404);

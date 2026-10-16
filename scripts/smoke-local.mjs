@@ -30,16 +30,16 @@ const form = new FormData();
 form.set("kind", "safety"); form.set("location", "QA test location"); form.set("description", "A temporary test barrier needs attention.");
 form.set("photo", new Blob([new Uint8Array([137,80,78,71,13,10,26,10])], { type: "image/png" }), "test.png");
 const submitted = await request("/api/reports", { method: "POST", body: form });
-const trackQuery = new URLSearchParams({ reference: submitted.reference, code: submitted.accessCode });
-let tracked = await request("/api/reports/track?" + trackQuery);
+const trackBody = JSON.stringify({ reference: submitted.reference, accessCode: submitted.accessCode });
+let tracked = await request("/api/reports/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: trackBody });
 if (tracked.report.status !== "received" || tracked.events.length !== 1) throw new Error("New report was not persisted");
-const wrongCode = await fetch(base + "/api/reports/track?" + new URLSearchParams({ reference: submitted.reference, code: "WRONG" }));
+const wrongCode = await fetch(base + "/api/reports/track", { method: "POST", headers: { "Content-Type": "application/json", Origin: base }, body: JSON.stringify({ reference: submitted.reference, accessCode: "WRONG" }) });
 if (wrongCode.status !== 403) throw new Error("A wrong tracking code was accepted");
-await request("/api/reports/photo?" + trackQuery);
+await request("/api/reports/photo?reference=" + encodeURIComponent(submitted.reference));
 await request("/api/admin/reports", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
   reference: submitted.reference, status: "reviewing", noteEn: "The project team is checking the site.", noteZh: "项目组正在检查现场。", noteMs: "Pasukan projek sedang menyemak lokasi.",
 }) });
-tracked = await request("/api/reports/track?" + trackQuery);
+tracked = await request("/api/reports/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: trackBody });
 if (tracked.report.status !== "reviewing" || tracked.events.length !== 2) throw new Error("Report status did not update");
 await request("/api/subscriptions", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ categories: ["closure", "safety"] }) });
 const preferences = await request("/api/subscriptions");
