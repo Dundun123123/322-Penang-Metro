@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { notices } from "@/db/schema";
 import { adminUser, jsonError, readJsonObject, sameOrigin, trim, validKinds } from "@/lib/server";
+import { getChatGPTUser } from "@/app/chatgpt-auth";
 
 export async function GET(request: Request) {
   const db = getDb();
@@ -9,7 +10,13 @@ export async function GET(request: Request) {
   if (all && !(await adminUser())) return jsonError("Forbidden", 403);
   const rows = all
     ? await db.select().from(notices).orderBy(desc(notices.createdAt)).limit(200)
-    : await db.select().from(notices).where(eq(notices.status, "published")).orderBy(desc(notices.createdAt)).limit(100);
+    : await getChatGPTUser()
+      ? await db.select().from(notices).where(eq(notices.status, "published")).orderBy(desc(notices.createdAt)).limit(100)
+      : await db.select({ id: notices.id, kind: notices.kind, status: notices.status,
+          titleEn: notices.titleEn, titleZh: notices.titleZh, titleMs: notices.titleMs,
+          location: notices.location, startAt: notices.startAt, endAt: notices.endAt,
+          createdAt: notices.createdAt }).from(notices)
+        .where(eq(notices.status, "published")).orderBy(desc(notices.createdAt)).limit(100);
   return Response.json({ notices: rows });
 }
 

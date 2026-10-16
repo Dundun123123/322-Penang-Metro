@@ -20,6 +20,7 @@ export const words: Record<Locale, Record<string, string>> = {
     alertsTitle: "Choose the updates you follow", alertsBody: "Your choices are saved to your signed-in account. Matching published notices appear below.", savePreferences: "Save preferences", preferencesSaved: "Preferences saved", matchedUpdates: "Updates for you", noMatches: "No matching notices yet.",
     received: "Received", reviewing: "Under review", assigned: "Assigned", resolved: "Resolved", closed: "Closed", loading: "Loading…", requestFailed: "The request could not be completed. Please try again.", signIn: "Sign in to continue",
     footer: "Mutiara Line Community Desk", privacy: "Reports are visible to the reporter and authorised project team members.",
+    residentSignIn: "Resident sign in", signOut: "Sign out", teamPortal: "Construction team workspace", publicSummary: "A public summary is available. Sign in to read the full update and diversion guidance.", readDetails: "Read full update", signInForDetails: "Sign in for details", reportSignInTitle: "Sign in before sending a report", reportSignInBody: "Your account keeps the report linked to you so you can follow the response.", alertsSignInBody: "Sign in to save the types of updates you want to follow.",
   },
   zh: {
     brand: "珍珠线社区信息站", navHome: "首页", navNotices: "施工公告", navReport: "提交问题", navTrack: "追踪报告", navAlerts: "我的提醒", navAdmin: "项目组",
@@ -36,6 +37,7 @@ export const words: Record<Locale, Record<string, string>> = {
     alertsTitle: "选择关注的公告", alertsBody: "选择会保存到你的账户，符合类别的已发布公告会显示在下方。", savePreferences: "保存偏好", preferencesSaved: "偏好已保存", matchedUpdates: "与你相关的公告", noMatches: "暂时没有符合条件的公告。",
     received: "已收到", reviewing: "审核中", assigned: "已分派", resolved: "已解决", closed: "已关闭", loading: "加载中…", requestFailed: "操作未完成，请重试。", signIn: "请先登录",
     footer: "珍珠线社区信息站", privacy: "报告仅对提交者及获授权的项目组成员可见。",
+    residentSignIn: "居民登录", signOut: "退出登录", teamPortal: "施工团队工作台", publicSummary: "这里显示公开概览。登录后可查看完整内容及绕行指引。", readDetails: "查看完整公告", signInForDetails: "登录查看详情", reportSignInTitle: "登录后提交问题", reportSignInBody: "报告会与你的账号关联，方便后续追踪处理结果。", alertsSignInBody: "登录后可保存你关注的公告类别。",
   },
   ms: {
     brand: "Meja Komuniti Laluan Mutiara", navHome: "Utama", navNotices: "Makluman", navReport: "Lapor isu", navTrack: "Jejak laporan", navAlerts: "Makluman saya", navAdmin: "Pasukan projek",
@@ -52,6 +54,7 @@ export const words: Record<Locale, Record<string, string>> = {
     alertsTitle: "Pilih makluman yang diikuti", alertsBody: "Pilihan disimpan pada akaun anda. Makluman terbitan yang sepadan dipaparkan di bawah.", savePreferences: "Simpan pilihan", preferencesSaved: "Pilihan disimpan", matchedUpdates: "Makluman untuk anda", noMatches: "Tiada makluman yang sepadan buat masa ini.",
     received: "Diterima", reviewing: "Dalam semakan", assigned: "Ditugaskan", resolved: "Selesai", closed: "Ditutup", loading: "Memuatkan…", requestFailed: "Permintaan tidak berjaya. Sila cuba lagi.", signIn: "Log masuk untuk meneruskan",
     footer: "Meja Komuniti Laluan Mutiara", privacy: "Laporan hanya boleh dilihat oleh pelapor dan ahli pasukan projek yang dibenarkan.",
+    residentSignIn: "Log masuk komuniti", signOut: "Log keluar", teamPortal: "Ruang kerja pasukan pembinaan", publicSummary: "Ringkasan umum tersedia. Log masuk untuk butiran penuh dan panduan lencongan.", readDetails: "Baca makluman penuh", signInForDetails: "Log masuk untuk butiran", reportSignInTitle: "Log masuk sebelum menghantar laporan", reportSignInBody: "Akaun anda menghubungkan laporan supaya anda boleh mengikuti respons.", alertsSignInBody: "Log masuk untuk menyimpan kategori makluman yang ingin diikuti.",
   },
 };
 

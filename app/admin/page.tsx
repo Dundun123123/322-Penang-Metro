@@ -1,3 +1,3 @@
-import AdminApp from "@/components/admin-app";
+import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
-export default function AdminPage() { return <AdminApp />; }
+export default function AdminPage() { redirect("/team"); }
