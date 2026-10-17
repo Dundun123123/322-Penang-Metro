@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getChatGPTUser, chatGPTSignInPath } from "@/app/chatgpt-auth";
+import { getLocalUser } from "@/lib/auth";
 import AuthEntry from "@/components/auth-entry";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +17,6 @@ function safeDestination(value?: string) {
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
   const destination = safeDestination(next);
-  if (await getChatGPTUser()) redirect(destination);
-  return <AuthEntry audience="community" signedIn={false} signInHref={chatGPTSignInPath(destination)} continueHref={destination} />;
+  if (await getLocalUser()) redirect(destination);
+  return <AuthEntry audience="community" signedIn={false} continueHref={destination} />;
 }

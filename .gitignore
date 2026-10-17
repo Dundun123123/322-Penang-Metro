@@ -37,6 +37,7 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
+*.tsbuildinfo
 
 # Maintained Vite plugin and worker sources.
 !/build/
@@ -55,3 +56,7 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+
+# Local-only database, uploaded evidence and secrets
+/data/
+/.env.local

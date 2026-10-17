@@ -1,104 +1,87 @@
-# Mutiara Line Community Desk
+# Mutiara Line Community Desk（完全本地版）
 
-This is the full-stack CMT322 Penang LRT Mutiara Line community platform. It supports English, Chinese and Malay, and stores notices, issue reports, response history and alert preferences in D1. Optional report photos are stored in R2.
+这是 CMT322 Penang LRT Mutiara Line 社区平台的完整本地版本。界面使用 React/Next.js，但运行、账号、数据库和图片文件都在本机，不使用 Sites、ChatGPT 登录、Cloudflare D1 或 R2。
 
-The site is a student project. Do not publish unverified construction or traffic information as an official notice.
+## 系统结构
 
-## Main flows
+- 居民、通行者、商户：无需登录即可看施工公告概览；查看全文、提交问题和保存提醒时使用本地居民账号。
+- 施工团队：使用独立的 `/team/login` 入口和本地团队账号；可以发布施工公告、查看居民报告和更新处理状态。
+- 数据库：`data/mutiara-community.db`（SQLite）。
+- 上传图片：`data/uploads/`。
+- 登录会话：保存在 SQLite 中，通过仅限 HTTP 的 Cookie 识别，有效期 7 天。
+- 界面语言：English、中文、Bahasa Melayu。
 
-- Project team: use the separate `/team/login` entrance, sign in, open `/team`, claim the first administrator account with the one-time setup key, create a notice in draft or published state, edit or archive notices, inspect reports and photos, and add status updates with optional Chinese and Malay translations. Authentication alone does not grant team permissions.
-- Community member: browse published notice summaries without signing in. Opening a full notice goes through `/login` and returns to that notice after sign-in. Signed-in users can choose alert categories and submit an issue with an optional image, then track it by reference number. Anyone holding a valid report reference and access code can track that report.
-- Language: choose English, 中文 or Bahasa Melayu from the header. The interface preference is saved in the browser. Staff-authored content falls back to English when a translation is missing.
+`data/` 和 `.env.local` 已被 Git 忽略，不应提交或分享。备份网站数据时，应同时备份整个 `data` 文件夹。
 
-## Access and storage
+## Windows 首次安装
 
-Hosted private access uses Sites sign-in. Report creation and alert preferences require a signed-in account. Reports are visible to their owner or to someone holding the reference and access code. Project team operations require an administrator record. The first administrator must claim the role using ADMIN_SETUP_KEY, stored as a Sites secret.
-
-The site uses DB for D1 and BUCKET for R2, declared in .openai/hosting.json. The first migration is in drizzle/. Local development can set a test key in an ignored .dev.vars file.
-
-## Windows 本地安装与运行
-
-以下步骤在 **PowerShell** 中执行。完整功能版代码位于 `D:\PenangLRTCommunityHub\site`；上一级目录中的 `index.html` 是早期静态原型，不能直接打开它来使用数据库、上传或管理功能。
-
-### 1. 准备环境与打开代码
-
-安装 Node.js **22.13.0 或更新版本**（安装时包含 npm）。在 PowerShell 中检查：
+要求 Node.js 22.12.0 或更新版本。打开 PowerShell：
 
 ```powershell
 node --version
 npm --version
-```
-
-用 VS Code 选择“文件 → 打开文件夹”，打开 `D:\PenangLRTCommunityHub\site`。然后打开 VS Code 的“终端 → 新建终端”；也可以直接使用 Windows PowerShell。
-
-### 2. 安装依赖
-
-```powershell
 cd D:\PenangLRTCommunityHub\site
 npm ci
 ```
 
-`npm ci` 会按 `package-lock.json` 安装依赖。已有 `node_modules` 且依赖未变化时，可以跳过。`npm run db:generate` **不是首次安装步骤**，仅在修改 `db/schema.ts` 后生成新的数据库迁移时使用。
+不需要单独安装数据库。网站第一次启动时会自动创建 SQLite 文件和示例公告。
 
-### 3. 首次初始化本地数据库
-
-先构建项目，以生成本地 Wrangler 配置：
-
-```powershell
-npm run build
-```
-
-然后执行项目现有的第一条迁移：
-
-```powershell
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_amused_husk.sql
-```
-
-此命令只操作本地 `.wrangler/state` 中的测试数据库，不会修改线上数据。同一个本地数据库**不要重复执行**已执行过的迁移。今后若新增迁移，按文件顺序只执行尚未执行的 SQL 文件。
-
-### 4. 启动并在浏览器打开
-
-```powershell
-npm run dev
-```
-
-保持这个终端窗口运行，浏览器访问 **http://localhost:5173/**。停止服务时在终端按 `Ctrl+C`。居民登录页为 `/login`，施工团队入口为 `/team/login`。本地预览通过内置模拟登录测试流程，不是线上真实账号验证。
-
-### 5. 可选：启用本地管理员功能
-
-首次进入 `http://localhost:5173/admin` 时，若需创建本地管理员，在 `site` 文件夹中新建**不提交到 Git** 的 `.dev.vars` 文件，填入一行本地测试密钥：
-
-```text
-ADMIN_SETUP_KEY=请替换为你自己设置的本地测试密钥
-```
-
-重启 `npm run dev`，通过本地登录入口登录后，在 `/admin` 输入同一密钥以激活首位管理员。请勿在 README、截图或 Git 中写入真实线上密钥；本地密钥与线上环境是分开的。
-
-### 6. 可选：让同一局域网内的手机访问
-
-电脑和手机须连接同一个 Wi-Fi／局域网。先在电脑的 PowerShell 中运行 `ipconfig`，找到电脑当前网络的 **IPv4 地址**（例如 `192.168.31.174`）。关闭已有的开发服务，然后在 `site` 文件夹内运行：
+## 启动开发版本
 
 ```powershell
 cd D:\PenangLRTCommunityHub\site
-$env:SITE_LAN_HOST = '192.168.31.174'  # 换成你电脑当前的 IPv4 地址
 npm run dev
 ```
 
-保持终端运行，在手机浏览器打开 `http://192.168.31.174:5173/`（IP 换成你的实际地址）。电脑 IP 变化后，需要重新设置 `SITE_LAN_HOST` 并重启服务。若 Windows 防火墙弹出提示，只允许在**专用网络**访问；不要开放到公用网络或互联网。若手机仍打不开，检查两台设备是否在同一网络、路由器是否开启设备隔离，以及防火墙是否阻止 5173 端口。
+电脑打开 `http://localhost:5173/`。网站默认监听所有本地网卡，所以同一局域网的手机可以打开 `http://电脑IPv4地址:5173/`。当前电脑地址可用下面命令查询：
 
-**安全提示：**这是开发预览，登录是本地模拟账号，同一局域网访问者可能共用该测试身份；它仅适合可信网络上的演示和测试，不适合公开使用或存放真实个人资料。需要真实多人登录时，应使用正式托管部署与访问控制。结束演示后按 `Ctrl+C` 停止服务；新开终端或执行 `Remove-Item Env:SITE_LAN_HOST` 即恢复默认只在本机访问。
+```powershell
+ipconfig
+```
 
-**局域网登录限制：**Sites 内置的模拟登录只接受本机 `localhost/127.0.0.1` 请求。手机通过 `192.168.x.x` 可以浏览公开首页和公告摘要，但在此开发预览中无法完成登录，因此不能在手机上打开受保护的详情、提交报告或进入团队工作台。不要通过放宽模拟登录的安全检查来解决；真实手机登录需要正式托管站点的身份验证与合适的访问权限。目前线上站点仍保持私有。
+例如电脑 IPv4 是 `192.168.31.174`，手机就打开 `http://192.168.31.174:5173/`。电脑和手机必须处于同一 Wi-Fi／局域网。Windows 防火墙询问时只允许“专用网络”。
 
-### 常见问题
+## 创建账号
 
-- `node` 或 `npm` 无法识别：安装符合版本要求的 Node.js，关闭并重新打开终端。
-- `localhost:5173` 无法访问：确认 `npm run dev` 仍在运行，并查看终端中的实际端口或报错；不要双击 `index.html`。
-- 提示数据库表不存在：确认已成功完成第 3 步，并且命令在 `site` 文件夹内运行。
-- 端口 5173 被占用：关闭占用该端口的旧开发服务，再运行 `npm run dev`。
+### 居民账号
 
-开发人员可运行 `node scripts/smoke-local.mjs` 检查本地完整流程；该脚本会在本地数据库创建测试公告、报告和订阅记录，且首次管理员初始化需要将 `.dev.vars` 的 `ADMIN_SETUP_KEY` 设为 `local-test-setup-key`。不要对线上网站运行此脚本。
+打开 `/login`，选择“创建居民账号”，输入姓名、邮箱和至少 8 位密码。账号和密码哈希只保存在本机 SQLite 中。
 
-## Operational notes
+### 第一个施工团队账号
 
-This version provides in-app category alerts. Email or SMS delivery would require an external delivery provider and credentials. The site starts owner-private; access for additional project team members or the wider public must be configured separately before real use.
+打开 `/team/login`。系统没有团队账号时会显示首次设置表单，需要填写本机 `.env.local` 中的 `LOCAL_SETUP_KEY`。不要把该密钥写入文档或提交到 GitHub。首次创建团队账号后建议更换设置密钥并重启网站；系统已有团队账号后，网页不会再允许创建首个团队账号。
+
+## 在一条公告中绘制多条施工路段
+
+施工团队登录 `/team` 后，新建或选择公告，在“绘制施工路段”中搜索道路或地标。先沿第一段道路依次点击起点、转弯点和终点；遇到同时施工的分支，点击“新增路段”，再为新路段绘制节点。点击“路段 1”“路段 2”等按钮可切换正在编辑的路段。“撤销上一点”和“删除当前路段”只作用于选中的路段。完成后点击“保存公告”。
+
+已绘制的路段会一起显示在公告详情及“查看完整地图”页面。旧公告的单条路线会自动作为“路段 1”读取；地图底图和道路搜索需要联网。
+
+## 正式本地运行
+
+先构建一次：
+
+```powershell
+cd D:\PenangLRTCommunityHub\site
+npm run build
+npm start
+```
+
+`npm start` 同样监听 `0.0.0.0:5173`，可从电脑和同一局域网手机访问。保持 PowerShell 窗口运行；停止时按 `Ctrl+C`。
+
+## 常见问题
+
+- 手机打不开：确认电脑与手机在同一网络，检查 Windows 防火墙是否允许 Node.js 访问专用网络，并确认路由器没有开启设备隔离。
+- 端口被占用：关闭原来的 Node.js 服务，再运行启动命令。
+- 忘记居民或团队密码：当前版本没有邮件找回功能。可由维护人员直接管理本地数据库，或删除 `data` 文件夹重新初始化；删除 `data` 会永久删除所有账号、公告、报告和图片，操作前务必备份。
+- 迁移电脑：复制整个项目，并额外确保 `data` 文件夹和 `.env.local` 一起复制。
+- 外网访问：此配置只用于本机和可信局域网。不要把 5173 端口直接暴露到互联网；若要公开上线，需要 HTTPS、反向代理、备份和更严格的安全配置。
+
+## 主要命令
+
+```powershell
+npm run dev    # 开发模式，修改代码后自动刷新
+npm run build  # 检查并构建正式版本
+npm start      # 运行已构建的正式版本
+npm run lint   # 代码检查
+```

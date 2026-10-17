@@ -96,7 +96,7 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
     <header className="site-header" id="home">
       <a href="#home" className="brand"><span className="brand-mark">M</span><span>{t("brand")}</span></a>
       <nav aria-label="Main navigation"><a href="#updates">{t("navNotices")}</a><a href="#report">{t("navReport")}</a><a href="#track">{t("navTrack")}</a><a href="#alerts">{t("navAlerts")}</a></nav>
-      <div className="header-end"><label className="language"><span className="sr-only">Language</span><select value={locale} onChange={(e) => setLocale(e.target.value as typeof locale)}>{locales.map((item) => <option key={item} value={item}>{languageNames[item]}</option>)}</select></label><a className="account-link" href={signedIn ? "/signout-with-chatgpt?return_to=/" : "/login"} target={signedIn ? "_top" : undefined}>{signedIn ? t("signOut") : t("residentSignIn")}</a></div>
+      <div className="header-end"><label className="language"><span className="sr-only">Language</span><select value={locale} onChange={(e) => setLocale(e.target.value as typeof locale)}>{locales.map((item) => <option key={item} value={item}>{languageNames[item]}</option>)}</select></label><a className="account-link" href={signedIn ? "/logout" : "/login"}>{signedIn ? t("signOut") : t("residentSignIn")}</a></div>
     </header>
     <main>
       <div className="disclaimer">{t("unofficial")}</div>

@@ -1,72 +1,17 @@
-import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { notices } from "@/db/schema";
-import { adminUser, jsonError, readJsonObject, sameOrigin, trim, validKinds } from "@/lib/server";
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { getLocalUser } from "@/lib/auth";
+import { adminUser,jsonError,readJsonObject,sameOrigin,trim,validKinds } from "@/lib/server";
+import { decodeRoutePath, encodeRoutePath } from "@/lib/route-path";
+export const runtime="nodejs";
+const fullColumns=`id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,body_en AS bodyEn,body_zh AS bodyZh,body_ms AS bodyMs,location,start_at AS startAt,end_at AS endAt,diversion,latitude,longitude,route_path AS routePath,created_at AS createdAt,updated_at AS updatedAt`;
+const summaryColumns=`id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,location,start_at AS startAt,end_at AS endAt,created_at AS createdAt`;
+export async function GET(request:Request){const all=new URL(request.url).searchParams.get("all")==="1";if(all&&!(await adminUser()))return jsonError("Forbidden",403);const columns=all||await getLocalUser()?fullColumns:summaryColumns;const rows=getDb().prepare(`SELECT ${columns} FROM notices ${all?"":"WHERE status='published'"} ORDER BY created_at DESC LIMIT ?`).all(all?200:100);return Response.json({notices:rows});}
+export async function POST(request:Request){if(!sameOrigin(request))return jsonError("Invalid origin",403);if(!(await adminUser()))return jsonError("Forbidden",403);const x=await readJsonObject(request);if(!x)return jsonError("Invalid JSON");const kind=trim(x.kind,30),titleEn=trim(x.titleEn,180),bodyEn=trim(x.bodyEn,3000),location=trim(x.location,200),status=trim(x.status,20),routePath=validRoutePath(x.routePath);if(!validKinds.includes(kind as never)||!titleEn||!bodyEn||!location||!["draft","published"].includes(status)||routePath===undefined)return jsonError("Missing or invalid notice fields");const now=new Date().toISOString(),id=crypto.randomUUID();getDb().prepare(`INSERT INTO notices (id,kind,status,title_en,title_zh,title_ms,body_en,body_zh,body_ms,location,start_at,end_at,diversion,latitude,longitude,route_path,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,kind,status,titleEn,trim(x.titleZh,180)||null,trim(x.titleMs,180)||null,bodyEn,trim(x.bodyZh,3000)||null,trim(x.bodyMs,3000)||null,location,trim(x.startAt,40)||null,trim(x.endAt,40)||null,trim(x.diversion,600)||null,trim(x.latitude,24)||null,trim(x.longitude,24)||null,routePath,now,now);return Response.json({notice:{id}},{status:201});}
+export async function PATCH(request:Request){if(!sameOrigin(request))return jsonError("Invalid origin",403);if(!(await adminUser()))return jsonError("Forbidden",403);const x=await readJsonObject(request);if(!x)return jsonError("Invalid JSON");const id=trim(x.id,60),kind=trim(x.kind,30),status=trim(x.status,20),titleEn=trim(x.titleEn,180),bodyEn=trim(x.bodyEn,3000),location=trim(x.location,200),routePath=validRoutePath(x.routePath);if(!getDb().prepare("SELECT 1 FROM notices WHERE id=?").get(id))return jsonError("Notice not found",404);if(!validKinds.includes(kind as never)||!["draft","published","archived"].includes(status)||!titleEn||!bodyEn||!location||routePath===undefined)return jsonError("Missing or invalid notice fields");getDb().prepare(`UPDATE notices SET kind=?,status=?,title_en=?,title_zh=?,title_ms=?,body_en=?,body_zh=?,body_ms=?,location=?,start_at=?,end_at=?,diversion=?,latitude=?,longitude=?,route_path=?,updated_at=? WHERE id=?`).run(kind,status,titleEn,trim(x.titleZh,180)||null,trim(x.titleMs,180)||null,bodyEn,trim(x.bodyZh,3000)||null,trim(x.bodyMs,3000)||null,location,trim(x.startAt,40)||null,trim(x.endAt,40)||null,trim(x.diversion,600)||null,trim(x.latitude,24)||null,trim(x.longitude,24)||null,routePath,new Date().toISOString(),id);return Response.json({ok:true});}
 
-export async function GET(request: Request) {
-  const db = getDb();
-  const all = new URL(request.url).searchParams.get("all") === "1";
-  if (all && !(await adminUser())) return jsonError("Forbidden", 403);
-  const rows = all
-    ? await db.select().from(notices).orderBy(desc(notices.createdAt)).limit(200)
-    : await getChatGPTUser()
-      ? await db.select().from(notices).where(eq(notices.status, "published")).orderBy(desc(notices.createdAt)).limit(100)
-      : await db.select({ id: notices.id, kind: notices.kind, status: notices.status,
-          titleEn: notices.titleEn, titleZh: notices.titleZh, titleMs: notices.titleMs,
-          location: notices.location, startAt: notices.startAt, endAt: notices.endAt,
-          createdAt: notices.createdAt }).from(notices)
-        .where(eq(notices.status, "published")).orderBy(desc(notices.createdAt)).limit(100);
-  return Response.json({ notices: rows });
-}
-
-export async function POST(request: Request) {
-  if (!sameOrigin(request)) return jsonError("Invalid origin", 403);
-  if (!(await adminUser())) return jsonError("Forbidden", 403);
-  const input = await readJsonObject(request);
-  if (!input) return jsonError("Invalid JSON");
-  const kind = trim(input.kind, 30);
-  const titleEn = trim(input.titleEn, 180);
-  const bodyEn = trim(input.bodyEn, 3000);
-  const location = trim(input.location, 200);
-  const status = trim(input.status, 20);
-  if (!validKinds.includes(kind as typeof validKinds[number]) || !titleEn || !bodyEn || !location || !["draft", "published"].includes(status)) return jsonError("Missing or invalid notice fields");
-  const now = new Date().toISOString();
-  const notice = {
-    id: crypto.randomUUID(), kind, status, titleEn, bodyEn, location,
-    titleZh: trim(input.titleZh, 180) || null, titleMs: trim(input.titleMs, 180) || null,
-    bodyZh: trim(input.bodyZh, 3000) || null, bodyMs: trim(input.bodyMs, 3000) || null,
-    startAt: trim(input.startAt, 40) || null, endAt: trim(input.endAt, 40) || null,
-    diversion: trim(input.diversion, 600) || null,
-    latitude: trim(input.latitude, 24) || null, longitude: trim(input.longitude, 24) || null,
-    createdAt: now, updatedAt: now,
-  };
-  await getDb().insert(notices).values(notice);
-  return Response.json({ notice }, { status: 201 });
-}
-
-export async function PATCH(request: Request) {
-  if (!sameOrigin(request)) return jsonError("Invalid origin", 403);
-  if (!(await adminUser())) return jsonError("Forbidden", 403);
-  const input = await readJsonObject(request);
-  if (!input) return jsonError("Invalid JSON");
-  const id = trim(input.id, 60);
-  const found = await getDb().select().from(notices).where(eq(notices.id, id)).limit(1);
-  if (!found.length) return jsonError("Notice not found", 404);
-  const kind = trim(input.kind, 30);
-  const status = trim(input.status, 20);
-  const titleEn = trim(input.titleEn, 180);
-  const bodyEn = trim(input.bodyEn, 3000);
-  const location = trim(input.location, 200);
-  if (!validKinds.includes(kind as typeof validKinds[number]) || !["draft","published","archived"].includes(status) || !titleEn || !bodyEn || !location) return jsonError("Missing or invalid notice fields");
-  await getDb().update(notices).set({
-    kind, status, titleEn, bodyEn, location,
-    titleZh: trim(input.titleZh, 180) || null, titleMs: trim(input.titleMs, 180) || null,
-    bodyZh: trim(input.bodyZh, 3000) || null, bodyMs: trim(input.bodyMs, 3000) || null,
-    startAt: trim(input.startAt, 40) || null, endAt: trim(input.endAt, 40) || null,
-    diversion: trim(input.diversion, 600) || null,
-    latitude: trim(input.latitude, 24) || null, longitude: trim(input.longitude, 24) || null,
-    updatedAt: new Date().toISOString(),
-  }).where(eq(notices.id, id));
-  return Response.json({ ok: true });
+function validRoutePath(value: unknown) {
+  const routes = decodeRoutePath(value);
+  if (routes === null) return undefined;
+  const encoded = encodeRoutePath(routes);
+  return encoded === "[]" ? null : encoded;
 }

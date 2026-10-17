@@ -1,9 +1,9 @@
-import { getChatGPTUser, chatGPTSignInPath } from "@/app/chatgpt-auth";
+import { getLocalUser, teamExists } from "@/lib/auth";
 import AuthEntry from "@/components/auth-entry";
 
 export const dynamic = "force-dynamic";
 
 export default async function TeamLoginPage() {
-  const user = await getChatGPTUser();
-  return <AuthEntry audience="team" signedIn={Boolean(user)} signInHref={chatGPTSignInPath("/team")} continueHref="/team" />;
+  const user = await getLocalUser();
+  return <AuthEntry audience="team" signedIn={user?.role === "team"} continueHref="/team" teamSetupAvailable={!teamExists()} />;
 }

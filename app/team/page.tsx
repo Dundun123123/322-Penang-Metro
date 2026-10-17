@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { teamUser } from "@/lib/auth";
 import AdminApp from "@/components/admin-app";
 
 export const dynamic = "force-dynamic";
 
 export default async function TeamPage() {
-  if (!await getChatGPTUser()) redirect("/team/login");
+  if (!await teamUser()) redirect("/team/login");
   return <AdminApp />;
 }
