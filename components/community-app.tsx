@@ -12,9 +12,9 @@ type Notice = {
 type Report = { reference: string; kind: string; location: string; description: string; status: string; createdAt: string; hasPhoto: boolean };
 type Event = { id: string; status: string; noteEn: string; noteZh?: string | null; noteMs?: string | null; createdAt: string };
 
-async function api(path: string, options?: RequestInit) {
+async function api<T = unknown>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, { cache: "no-store", ...options });
-  const data: any = await response.json().catch(() => ({}));
+  const data = await response.json().catch(() => ({})) as T & { error?: string };
   if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
   return data;
 }
@@ -38,8 +38,8 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
   const [tracking, setTracking] = useState(false);
 
   useEffect(() => {
-    api("/api/notices").then((data) => setNotices(data.notices)).catch((error) => setLoadError(error.message));
-    api("/api/subscriptions").then((data) => setSubscribed(data.categories)).catch(() => {});
+    api<{ notices: Notice[] }>("/api/notices").then((data) => setNotices(data.notices)).catch((error) => setLoadError(error.message));
+    api<{ categories: string[] }>("/api/subscriptions").then((data) => setSubscribed(data.categories)).catch(() => {});
   }, []);
 
   const visible = useMemo(() => notices.filter((notice) => {
@@ -59,7 +59,7 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
     event.preventDefault(); setReportMessage(""); setReceipt(null); setSending(true);
     const form = event.currentTarget;
     try {
-      const data = await api("/api/reports", { method: "POST", body: new FormData(form) });
+      const data = await api<{ reference: string; accessCode: string }>("/api/reports", { method: "POST", body: new FormData(form) });
       setReceipt({ reference: data.reference, accessCode: data.accessCode });
       setTrackReference(data.reference); setTrackCode(data.accessCode);
       form.reset();
@@ -69,7 +69,7 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
   async function track(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setTracking(true); setTrackData(null); setTrackError("");
     try {
-      const data = await api("/api/reports/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reference: trackReference, accessCode: trackCode }) });
+      const data = await api<{ report: Report; events: Event[] }>("/api/reports/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reference: trackReference, accessCode: trackCode }) });
       setTrackData(data);
     } catch (error) { setTrackError(error instanceof Error ? error.message : t("requestFailed")); }
     finally { setTracking(false); }

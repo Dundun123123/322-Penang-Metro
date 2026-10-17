@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { kinds, languageNames, locales } from "@/lib/i18n";
 import { useLocale } from "@/lib/use-locale";
 import ConstructionMap from "@/components/construction-map";
@@ -12,6 +13,7 @@ type NoticeForm = {
 };
 type Report = { id: string; reference: string; kind: string; location: string; description: string; contactEmail?: string | null; status: string; createdAt: string; hasPhoto: boolean };
 type ReportEvent = { id: string; reportId: string; status: string; noteEn: string; noteZh?: string | null; noteMs?: string | null; createdAt: string };
+type AdminAccount = { signedIn: boolean; isAdmin: boolean; needsSetup: boolean };
 const emptyNotice = (): NoticeForm => ({ kind: "closure", status: "draft", titleEn: "", titleZh: "", titleMs: "", bodyEn: "", bodyZh: "", bodyMs: "", location: "", startAt: "", endAt: "", diversion: "", latitude: "", longitude: "", routePath: "" });
 
 const adminWords = {
@@ -19,11 +21,20 @@ const adminWords = {
   zh: { title: "项目组工作台", subtitle: "发布已核实的公告并处理社区报告。", notices: "公告管理", reports: "问题报告", back: "返回社区网站", setup: "设置首位管理员", setupHelp: "请输入网站提供的私人设置密钥。此密钥只能用于首次设置。", setupKey: "设置密钥", claim: "启用管理权限", newNotice: "新建公告", editNotice: "编辑公告", saveNotice: "保存公告", cancelEdit: "改为新建公告", titleEn: "英文标题", titleZh: "中文标题", titleMs: "马来文标题", bodyEn: "英文详情", bodyZh: "中文详情", bodyMs: "马来文详情", noticeTitle: "公告标题", noticeBody: "公告详情", singleLanguageHelp: "使用一种语言发布即可，居民会看到你在这里填写的原文。", location: "地点", kind: "类别", status: "发布状态", start: "开始时间（马来西亚）", end: "结束时间（马来西亚）", diversion: "绕行或通行说明", latitude: "纬度（选填）", longitude: "经度（选填）", note: "英文处理说明", noteZh: "中文处理说明", noteMs: "马来文处理说明", update: "更新报告", noReports: "目前没有报告。", noNotices: "目前没有公告。", evidence: "查看照片", sent: "保存成功。", forbidden: "你的账户没有项目组权限。", loading: "加载中…", contact: "联系方式", history: "处理记录", reportStatus: "新状态", responseHelp: "处理说明会显示给报告提交者。", draft: "草稿", published: "已发布", archived: "已归档", received: "已收到", reviewing: "审核中", assigned: "已分派", resolved: "已解决", closed: "已关闭" },
   ms: { title: "Ruang kerja pasukan projek", subtitle: "Terbitkan makluman yang disahkan dan respons laporan komuniti.", notices: "Makluman", reports: "Laporan", back: "Laman komuniti", setup: "Sediakan pentadbir pertama", setupHelp: "Masukkan kunci persediaan peribadi yang dibekalkan bersama laman. Kunci ini hanya boleh digunakan sekali.", setupKey: "Kunci persediaan", claim: "Aktifkan pentadbiran", newNotice: "Makluman baharu", editNotice: "Sunting makluman", saveNotice: "Simpan makluman", cancelEdit: "Buat makluman baharu", titleEn: "Tajuk dalam bahasa Inggeris", titleZh: "Tajuk dalam bahasa Cina", titleMs: "Tajuk dalam bahasa Melayu", bodyEn: "Butiran dalam bahasa Inggeris", bodyZh: "Butiran dalam bahasa Cina", bodyMs: "Butiran dalam bahasa Melayu", noticeTitle: "Tajuk makluman", noticeBody: "Butiran makluman", singleLanguageHelp: "Terbitkan dalam satu bahasa sahaja. Penduduk akan melihat teks asal yang dimasukkan di sini.", location: "Lokasi", kind: "Kategori", status: "Status penerbitan", start: "Masa mula (Malaysia)", end: "Masa tamat (Malaysia)", diversion: "Lencongan atau panduan akses", latitude: "Latitud (pilihan)", longitude: "Longitud (pilihan)", note: "Nota respons dalam bahasa Inggeris", noteZh: "Nota respons dalam bahasa Cina", noteMs: "Nota respons dalam bahasa Melayu", update: "Kemas kini laporan", noReports: "Belum ada laporan.", noNotices: "Belum ada makluman.", evidence: "Lihat foto", sent: "Berjaya disimpan.", forbidden: "Anda tiada akses pasukan projek.", loading: "Memuatkan…", contact: "Hubungan", history: "Sejarah respons", reportStatus: "Status baharu", responseHelp: "Nota respons dapat dilihat oleh pelapor.", draft: "Draf", published: "Diterbitkan", archived: "Diarkibkan", received: "Diterima", reviewing: "Dalam semakan", assigned: "Ditugaskan", resolved: "Selesai", closed: "Ditutup" },
 };
-async function api(path: string, options?: RequestInit) {
+async function api<T = unknown>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, { cache: "no-store", ...options });
-  const body: any = await response.json().catch(() => ({}));
+  const body = await response.json().catch(() => ({})) as T & { error?: string };
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
   return body;
+}
+async function fetchAdminData() {
+  const account = await api<AdminAccount>("/api/admin");
+  if (!account.isAdmin) return { account, notices: [] as NoticeForm[], reports: [] as Report[], events: [] as ReportEvent[] };
+  const [noticeData, reportData] = await Promise.all([
+    api<{ notices: NoticeForm[] }>("/api/notices?all=1"),
+    api<{ reports: Report[]; events: ReportEvent[] }>("/api/admin/reports"),
+  ]);
+  return { account, notices: noticeData.notices, reports: reportData.reports, events: reportData.events };
 }
 function localInput(value?: string | null) {
   if (!value) return "";
@@ -35,7 +46,7 @@ function toIso(value: string) { return value ? new Date(value + ":00+08:00").toI
 export default function AdminApp() {
   const { locale, setLocale, t } = useLocale();
   const a = adminWords[locale];
-  const [auth, setAuth] = useState<{ signedIn: boolean; isAdmin: boolean; needsSetup: boolean } | null>(null);
+  const [auth, setAuth] = useState<AdminAccount | null>(null);
   const [setupKey, setSetupKey] = useState("");
   const [tab, setTab] = useState<"notices" | "reports">("notices");
   const [notices, setNotices] = useState<NoticeForm[]>([]);
@@ -49,15 +60,19 @@ export default function AdminApp() {
   const [noteMs, setNoteMs] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  async function load() {
-    const account = await api("/api/admin");
-    setAuth(account);
-    if (account.isAdmin) {
-      const [n, r] = await Promise.all([api("/api/notices?all=1"), api("/api/admin/reports")]);
-      setNotices(n.notices); setReports(r.reports); setEvents(r.events);
-    }
+  function applyAdminData(data: Awaited<ReturnType<typeof fetchAdminData>>) {
+    setAuth(data.account);
+    setNotices(data.notices); setReports(data.reports); setEvents(data.events);
   }
-  useEffect(() => { load().catch((error) => setMessage(error.message)); }, []);
+  async function load() {
+    applyAdminData(await fetchAdminData());
+  }
+  useEffect(() => {
+    let active = true;
+    fetchAdminData().then((data) => { if (active) applyAdminData(data); })
+      .catch((error) => { if (active) setMessage(error.message); });
+    return () => { active = false; };
+  }, []);
   async function setup(event: FormEvent) {
     event.preventDefault(); setBusy(true); setMessage("");
     try { await api("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ setupKey }) }); setSetupKey(""); await load(); }
@@ -85,7 +100,7 @@ export default function AdminApp() {
     return <div key={key} className={key === "diversion" ? "field-with-route" : undefined}><label>{label}{type === "textarea" ? <textarea required={required} value={value} onChange={(e) => setNotice({ ...notice, [key]: e.target.value })} /> : <input type={type} required={required} value={value} onChange={(e) => setNotice({ ...notice, [key]: e.target.value })} />}{key === "location" && <small className="field-help">{locationHelp}</small>}</label>{key === "diversion" && <section className="route-editor"><h3>{routeLabels.title}</h3><ConstructionMap key={notice.id || "new"} editable searchable initialQuery={notice.location} routes={decodeRoutePath(notice.routePath) || []} latitude={notice.latitude} longitude={notice.longitude} onChange={(routes) => setNotice({ ...notice, routePath: JSON.stringify(routes) })} labels={routeLabels} /></section>}</div>;
   }
   const activeReport = reports.find((item) => item.reference === selectedReport);
-  return <div className="admin-page"><header className="admin-top"><a href="/">← {a.back}</a><div className="header-end"><label className="language"><span className="sr-only">Language</span><select value={locale} onChange={(e) => setLocale(e.target.value as typeof locale)}>{locales.map((item) => <option key={item} value={item}>{languageNames[item]}</option>)}</select></label><a className="admin-link" href="/logout">{t("signOut")}</a></div></header><main className="admin-main"><p className="eyebrow">{t("teamPortal")}</p><h1>{a.title}</h1><p className="admin-intro">{a.subtitle}</p>{message && <p role="status" className={message === a.sent ? "" : "error"}>{message}</p>}
+  return <div className="admin-page"><header className="admin-top"><Link href="/">← {a.back}</Link><div className="header-end"><label className="language"><span className="sr-only">Language</span><select value={locale} onChange={(e) => setLocale(e.target.value as typeof locale)}>{locales.map((item) => <option key={item} value={item}>{languageNames[item]}</option>)}</select></label><a className="admin-link" href="/logout">{t("signOut")}</a></div></header><main className="admin-main"><p className="eyebrow">{t("teamPortal")}</p><h1>{a.title}</h1><p className="admin-intro">{a.subtitle}</p>{message && <p role="status" className={message === a.sent ? "" : "error"}>{message}</p>}
     {!auth && <p>{a.loading}</p>}
     {auth && !auth.signedIn && <p>{t("signIn")}</p>}
     {auth?.needsSetup && !auth.isAdmin && <form className="setup-card" onSubmit={setup}><h2>{a.setup}</h2><p>{a.setupHelp}</p><label>{a.setupKey}<input type="password" required value={setupKey} onChange={(e) => setSetupKey(e.target.value)} /></label><button className="button button-primary" disabled={busy}>{a.claim}</button></form>}
