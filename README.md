@@ -114,10 +114,12 @@ GitHub 仓库只包含代码。居民账号、公告、报告和图片保存在�
 npm run dev    # 开发模式，修改代码后自动刷新
 npm run build  # 检查并构建正式版本
 npm start      # 运行已构建的正式版本
+npm run format # 使用 Prettier 统一格式
+npm run format:check # 检查格式，不修改文件
 npm run lint   # 代码检查
 npm run typecheck # TypeScript 类型检查
 ```
 
 ## GitHub CI
 
-`.github/workflows/ci.yml` 会在推送到 `main` 和针对 `main` 的 Pull Request 时运行：`npm ci`、lint、TypeScript 类型检查和正式构建。CI 只验证代码，不使用本机 `.env.local`、数据库或上传图片，也不会自动部署到本地电脑。部署更新仍按上面的“更新已经部署的网站”步骤手动执行。
+`.github/workflows/ci.yml` 会在推送到 `main` 和针对 `main` 的 Pull Request 时运行：`npm ci`、Prettier 格式检查、lint、TypeScript 类型检查和正式构建。提交代码前运行 `npm run format`；CI 的 `format:check` 只检查，不自动改动代码。CI 不使用本机 `.env.local`、数据库或上传图片，也不会自动部署到本地电脑。部署更新仍按上面的“更新已经部署的网站”步骤手动执行。

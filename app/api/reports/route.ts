@@ -1,9 +1,93 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getDb,localDataDirectory } from "@/db";
+import { getDb, localDataDirectory } from "@/db";
 import { getLocalUser } from "@/lib/auth";
-import { isEmail,jsonError,randomHex,sameOrigin,sha256,trim } from "@/lib/server";
-export const runtime="nodejs";
-const issueKinds=["safety","access","closure","transport","noise","business","other"];
-export async function POST(request:Request){if(!sameOrigin(request))return jsonError("Invalid origin",403);const user=await getLocalUser();if(!user)return jsonError("Sign in is required",401);const form=await request.formData().catch(()=>null);if(!form)return jsonError("Invalid form");const kind=trim(form.get("kind"),30),location=trim(form.get("location"),200),description=trim(form.get("description"),3000),contactEmail=trim(form.get("contactEmail"),250);if(!issueKinds.includes(kind)||location.length<4||description.length<15||!isEmail(contactEmail))return jsonError("Please provide a valid issue type, location and description");const file=form.get("photo");if(file instanceof File&&file.size>0&&(!["image/jpeg","image/png","image/webp","image/gif"].includes(file.type)||file.size>5_000_000))return jsonError("Photo must be a JPG, PNG, WebP or GIF under 5 MB");const id=crypto.randomUUID(),reference=`ML-${new Date().getFullYear()}-${randomHex(5).toUpperCase()}`,accessCode=randomHex(12).toUpperCase(),accessHash=await sha256(accessCode);let photoKey:string|null=null,photoType:string|null=null;if(file instanceof File&&file.size>0){const ext={"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif"}[file.type]||"bin";photoKey=`${id}.${ext}`;photoType=file.type;const uploadDirectory=path.join(localDataDirectory,"uploads");fs.mkdirSync(uploadDirectory,{recursive:true});fs.writeFileSync(path.join(uploadDirectory,photoKey),Buffer.from(await file.arrayBuffer()));}const now=new Date().toISOString(),db=getDb();db.transaction(()=>{db.prepare(`INSERT INTO reports (id,reference,access_hash,owner_user_id,contact_email,kind,location,description,photo_key,photo_type,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,reference,accessHash,user.id,contactEmail||user.email,kind,location,description,photoKey,photoType,"received",now,now);db.prepare(`INSERT INTO report_events (id,report_id,status,note_en,note_zh,note_ms,created_at) VALUES (?,?,?,?,?,?,?)`).run(crypto.randomUUID(),id,"received","Report received and awaiting review.","报告已收到，等待项目组审核。","Laporan diterima dan menunggu semakan pasukan projek.",now);})();return Response.json({reference,accessCode,status:"received"},{status:201});}
-export async function GET(){const user=await getLocalUser();if(!user)return jsonError("Sign in is required",401);const rows=getDb().prepare(`SELECT reference,kind,location,status,created_at AS createdAt FROM reports WHERE owner_user_id=? ORDER BY created_at DESC LIMIT 100`).all(user.id);return Response.json({reports:rows});}
+import { isEmail, jsonError, randomHex, sameOrigin, sha256, trim } from "@/lib/server";
+export const runtime = "nodejs";
+const issueKinds = ["safety", "access", "closure", "transport", "noise", "business", "other"];
+export async function POST(request: Request) {
+  if (!sameOrigin(request)) return jsonError("Invalid origin", 403);
+  const user = await getLocalUser();
+  if (!user) return jsonError("Sign in is required", 401);
+  const form = await request.formData().catch(() => null);
+  if (!form) return jsonError("Invalid form");
+  const kind = trim(form.get("kind"), 30),
+    location = trim(form.get("location"), 200),
+    description = trim(form.get("description"), 3000),
+    contactEmail = trim(form.get("contactEmail"), 250);
+  if (
+    !issueKinds.includes(kind) ||
+    location.length < 4 ||
+    description.length < 15 ||
+    !isEmail(contactEmail)
+  )
+    return jsonError("Please provide a valid issue type, location and description");
+  const file = form.get("photo");
+  if (
+    file instanceof File &&
+    file.size > 0 &&
+    (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) ||
+      file.size > 5_000_000)
+  )
+    return jsonError("Photo must be a JPG, PNG, WebP or GIF under 5 MB");
+  const id = crypto.randomUUID(),
+    reference = `ML-${new Date().getFullYear()}-${randomHex(5).toUpperCase()}`,
+    accessCode = randomHex(12).toUpperCase(),
+    accessHash = await sha256(accessCode);
+  let photoKey: string | null = null,
+    photoType: string | null = null;
+  if (file instanceof File && file.size > 0) {
+    const ext =
+      { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" }[
+        file.type
+      ] || "bin";
+    photoKey = `${id}.${ext}`;
+    photoType = file.type;
+    const uploadDirectory = path.join(localDataDirectory, "uploads");
+    fs.mkdirSync(uploadDirectory, { recursive: true });
+    fs.writeFileSync(path.join(uploadDirectory, photoKey), Buffer.from(await file.arrayBuffer()));
+  }
+  const now = new Date().toISOString(),
+    db = getDb();
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO reports (id,reference,access_hash,owner_user_id,contact_email,kind,location,description,photo_key,photo_type,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      id,
+      reference,
+      accessHash,
+      user.id,
+      contactEmail || user.email,
+      kind,
+      location,
+      description,
+      photoKey,
+      photoType,
+      "received",
+      now,
+      now,
+    );
+    db.prepare(
+      `INSERT INTO report_events (id,report_id,status,note_en,note_zh,note_ms,created_at) VALUES (?,?,?,?,?,?,?)`,
+    ).run(
+      crypto.randomUUID(),
+      id,
+      "received",
+      "Report received and awaiting review.",
+      "报告已收到，等待项目组审核。",
+      "Laporan diterima dan menunggu semakan pasukan projek.",
+      now,
+    );
+  })();
+  return Response.json({ reference, accessCode, status: "received" }, { status: 201 });
+}
+export async function GET() {
+  const user = await getLocalUser();
+  if (!user) return jsonError("Sign in is required", 401);
+  const rows = getDb()
+    .prepare(
+      `SELECT reference,kind,location,status,created_at AS createdAt FROM reports WHERE owner_user_id=? ORDER BY created_at DESC LIMIT 100`,
+    )
+    .all(user.id);
+  return Response.json({ reports: rows });
+}

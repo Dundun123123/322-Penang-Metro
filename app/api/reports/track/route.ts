@@ -25,18 +25,33 @@ export async function POST(request: Request) {
   const accessCode = trim(input?.accessCode, 40).toUpperCase();
   if (!reference) return jsonError("Reference is required");
 
-  const row = getDb().prepare(`SELECT id,reference,access_hash AS accessHash,owner_user_id AS ownerUserId,kind,location,description,photo_key AS photoKey,status,created_at AS createdAt,updated_at AS updatedAt FROM reports WHERE reference=?`).get(reference) as ReportRow | undefined;
+  const row = getDb()
+    .prepare(
+      `SELECT id,reference,access_hash AS accessHash,owner_user_id AS ownerUserId,kind,location,description,photo_key AS photoKey,status,created_at AS createdAt,updated_at AS updatedAt FROM reports WHERE reference=?`,
+    )
+    .get(reference) as ReportRow | undefined;
   if (!row) return jsonError("Report not found", 404);
 
   const user = await getLocalUser();
   const owns = Boolean(user && row.ownerUserId === user.id);
-  if (!owns && (!accessCode || await sha256(accessCode) !== row.accessHash)) return jsonError("Reference or access code is incorrect", 403);
+  if (!owns && (!accessCode || (await sha256(accessCode)) !== row.accessHash))
+    return jsonError("Reference or access code is incorrect", 403);
 
-  const events = getDb().prepare(`SELECT id,status,note_en AS noteEn,note_zh AS noteZh,note_ms AS noteMs,created_at AS createdAt FROM report_events WHERE report_id=? ORDER BY created_at`).all(row.id);
+  const events = getDb()
+    .prepare(
+      `SELECT id,status,note_en AS noteEn,note_zh AS noteZh,note_ms AS noteMs,created_at AS createdAt FROM report_events WHERE report_id=? ORDER BY created_at`,
+    )
+    .all(row.id);
   const report = {
-    id: row.id, reference: row.reference, kind: row.kind, location: row.location,
-    description: row.description, status: row.status, createdAt: row.createdAt,
-    updatedAt: row.updatedAt, hasPhoto: Boolean(row.photoKey),
+    id: row.id,
+    reference: row.reference,
+    kind: row.kind,
+    location: row.location,
+    description: row.description,
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    hasPhoto: Boolean(row.photoKey),
   };
   return Response.json({ report, events }, { headers: { "Cache-Control": "private, no-store" } });
 }

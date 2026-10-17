@@ -1,13 +1,117 @@
 import { getDb } from "@/db";
 import { getLocalUser } from "@/lib/auth";
-import { adminUser,jsonError,readJsonObject,sameOrigin,trim,validKinds } from "@/lib/server";
+import { adminUser, jsonError, readJsonObject, sameOrigin, trim, validKinds } from "@/lib/server";
 import { decodeRoutePath, encodeRoutePath } from "@/lib/route-path";
-export const runtime="nodejs";
-const fullColumns=`id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,body_en AS bodyEn,body_zh AS bodyZh,body_ms AS bodyMs,location,start_at AS startAt,end_at AS endAt,diversion,latitude,longitude,route_path AS routePath,created_at AS createdAt,updated_at AS updatedAt`;
-const summaryColumns=`id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,location,start_at AS startAt,end_at AS endAt,created_at AS createdAt`;
-export async function GET(request:Request){const all=new URL(request.url).searchParams.get("all")==="1";if(all&&!(await adminUser()))return jsonError("Forbidden",403);const columns=all||await getLocalUser()?fullColumns:summaryColumns;const rows=getDb().prepare(`SELECT ${columns} FROM notices ${all?"":"WHERE status='published'"} ORDER BY created_at DESC LIMIT ?`).all(all?200:100);return Response.json({notices:rows});}
-export async function POST(request:Request){if(!sameOrigin(request))return jsonError("Invalid origin",403);if(!(await adminUser()))return jsonError("Forbidden",403);const x=await readJsonObject(request);if(!x)return jsonError("Invalid JSON");const kind=trim(x.kind,30),titleEn=trim(x.titleEn,180),bodyEn=trim(x.bodyEn,3000),location=trim(x.location,200),status=trim(x.status,20),routePath=validRoutePath(x.routePath);if(!validKinds.includes(kind as never)||!titleEn||!bodyEn||!location||!["draft","published"].includes(status)||routePath===undefined)return jsonError("Missing or invalid notice fields");const now=new Date().toISOString(),id=crypto.randomUUID();getDb().prepare(`INSERT INTO notices (id,kind,status,title_en,title_zh,title_ms,body_en,body_zh,body_ms,location,start_at,end_at,diversion,latitude,longitude,route_path,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,kind,status,titleEn,trim(x.titleZh,180)||null,trim(x.titleMs,180)||null,bodyEn,trim(x.bodyZh,3000)||null,trim(x.bodyMs,3000)||null,location,trim(x.startAt,40)||null,trim(x.endAt,40)||null,trim(x.diversion,600)||null,trim(x.latitude,24)||null,trim(x.longitude,24)||null,routePath,now,now);return Response.json({notice:{id}},{status:201});}
-export async function PATCH(request:Request){if(!sameOrigin(request))return jsonError("Invalid origin",403);if(!(await adminUser()))return jsonError("Forbidden",403);const x=await readJsonObject(request);if(!x)return jsonError("Invalid JSON");const id=trim(x.id,60),kind=trim(x.kind,30),status=trim(x.status,20),titleEn=trim(x.titleEn,180),bodyEn=trim(x.bodyEn,3000),location=trim(x.location,200),routePath=validRoutePath(x.routePath);if(!getDb().prepare("SELECT 1 FROM notices WHERE id=?").get(id))return jsonError("Notice not found",404);if(!validKinds.includes(kind as never)||!["draft","published","archived"].includes(status)||!titleEn||!bodyEn||!location||routePath===undefined)return jsonError("Missing or invalid notice fields");getDb().prepare(`UPDATE notices SET kind=?,status=?,title_en=?,title_zh=?,title_ms=?,body_en=?,body_zh=?,body_ms=?,location=?,start_at=?,end_at=?,diversion=?,latitude=?,longitude=?,route_path=?,updated_at=? WHERE id=?`).run(kind,status,titleEn,trim(x.titleZh,180)||null,trim(x.titleMs,180)||null,bodyEn,trim(x.bodyZh,3000)||null,trim(x.bodyMs,3000)||null,location,trim(x.startAt,40)||null,trim(x.endAt,40)||null,trim(x.diversion,600)||null,trim(x.latitude,24)||null,trim(x.longitude,24)||null,routePath,new Date().toISOString(),id);return Response.json({ok:true});}
+export const runtime = "nodejs";
+const fullColumns = `id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,body_en AS bodyEn,body_zh AS bodyZh,body_ms AS bodyMs,location,start_at AS startAt,end_at AS endAt,diversion,latitude,longitude,route_path AS routePath,created_at AS createdAt,updated_at AS updatedAt`;
+const summaryColumns = `id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,location,start_at AS startAt,end_at AS endAt,created_at AS createdAt`;
+export async function GET(request: Request) {
+  const all = new URL(request.url).searchParams.get("all") === "1";
+  if (all && !(await adminUser())) return jsonError("Forbidden", 403);
+  const columns = all || (await getLocalUser()) ? fullColumns : summaryColumns;
+  const rows = getDb()
+    .prepare(
+      `SELECT ${columns} FROM notices ${all ? "" : "WHERE status='published'"} ORDER BY created_at DESC LIMIT ?`,
+    )
+    .all(all ? 200 : 100);
+  return Response.json({ notices: rows });
+}
+export async function POST(request: Request) {
+  if (!sameOrigin(request)) return jsonError("Invalid origin", 403);
+  if (!(await adminUser())) return jsonError("Forbidden", 403);
+  const x = await readJsonObject(request);
+  if (!x) return jsonError("Invalid JSON");
+  const kind = trim(x.kind, 30),
+    titleEn = trim(x.titleEn, 180),
+    bodyEn = trim(x.bodyEn, 3000),
+    location = trim(x.location, 200),
+    status = trim(x.status, 20),
+    routePath = validRoutePath(x.routePath);
+  if (
+    !validKinds.includes(kind as never) ||
+    !titleEn ||
+    !bodyEn ||
+    !location ||
+    !["draft", "published"].includes(status) ||
+    routePath === undefined
+  )
+    return jsonError("Missing or invalid notice fields");
+  const now = new Date().toISOString(),
+    id = crypto.randomUUID();
+  getDb()
+    .prepare(
+      `INSERT INTO notices (id,kind,status,title_en,title_zh,title_ms,body_en,body_zh,body_ms,location,start_at,end_at,diversion,latitude,longitude,route_path,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    )
+    .run(
+      id,
+      kind,
+      status,
+      titleEn,
+      trim(x.titleZh, 180) || null,
+      trim(x.titleMs, 180) || null,
+      bodyEn,
+      trim(x.bodyZh, 3000) || null,
+      trim(x.bodyMs, 3000) || null,
+      location,
+      trim(x.startAt, 40) || null,
+      trim(x.endAt, 40) || null,
+      trim(x.diversion, 600) || null,
+      trim(x.latitude, 24) || null,
+      trim(x.longitude, 24) || null,
+      routePath,
+      now,
+      now,
+    );
+  return Response.json({ notice: { id } }, { status: 201 });
+}
+export async function PATCH(request: Request) {
+  if (!sameOrigin(request)) return jsonError("Invalid origin", 403);
+  if (!(await adminUser())) return jsonError("Forbidden", 403);
+  const x = await readJsonObject(request);
+  if (!x) return jsonError("Invalid JSON");
+  const id = trim(x.id, 60),
+    kind = trim(x.kind, 30),
+    status = trim(x.status, 20),
+    titleEn = trim(x.titleEn, 180),
+    bodyEn = trim(x.bodyEn, 3000),
+    location = trim(x.location, 200),
+    routePath = validRoutePath(x.routePath);
+  if (!getDb().prepare("SELECT 1 FROM notices WHERE id=?").get(id))
+    return jsonError("Notice not found", 404);
+  if (
+    !validKinds.includes(kind as never) ||
+    !["draft", "published", "archived"].includes(status) ||
+    !titleEn ||
+    !bodyEn ||
+    !location ||
+    routePath === undefined
+  )
+    return jsonError("Missing or invalid notice fields");
+  getDb()
+    .prepare(
+      `UPDATE notices SET kind=?,status=?,title_en=?,title_zh=?,title_ms=?,body_en=?,body_zh=?,body_ms=?,location=?,start_at=?,end_at=?,diversion=?,latitude=?,longitude=?,route_path=?,updated_at=? WHERE id=?`,
+    )
+    .run(
+      kind,
+      status,
+      titleEn,
+      trim(x.titleZh, 180) || null,
+      trim(x.titleMs, 180) || null,
+      bodyEn,
+      trim(x.bodyZh, 3000) || null,
+      trim(x.bodyMs, 3000) || null,
+      location,
+      trim(x.startAt, 40) || null,
+      trim(x.endAt, 40) || null,
+      trim(x.diversion, 600) || null,
+      trim(x.latitude, 24) || null,
+      trim(x.longitude, 24) || null,
+      routePath,
+      new Date().toISOString(),
+      id,
+    );
+  return Response.json({ ok: true });
+}
 
 function validRoutePath(value: unknown) {
   const routes = decodeRoutePath(value);

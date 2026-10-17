@@ -20,7 +20,9 @@ function getLocale(): Locale {
 
 export function useLocale() {
   const locale = useSyncExternalStore<Locale>(subscribe, getLocale, () => "en");
-  useEffect(() => { document.documentElement.lang = locale; }, [locale]);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
   function setLocale(next: Locale) {
     window.localStorage.setItem("mutiara-locale", next);
     window.dispatchEvent(new Event(localeEvent));
