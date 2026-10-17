@@ -24,7 +24,24 @@ cd D:\PenangLRTCommunityHub\site
 npm ci
 ```
 
-不需要单独安装数据库。网站第一次启动时会自动创建 SQLite 文件和示例公告。
+上面的 `D:\PenangLRTCommunityHub\site` 是当前电脑的路径；新电脑请替换成实际保存项目的路径。接着复制可公开上传的环境变量模板：
+
+```powershell
+Copy-Item .env.example .env.local
+notepad .env.local
+```
+
+可以在 PowerShell 中生成随机密钥：
+
+```powershell
+$secretBytes = New-Object byte[] 32
+$randomGenerator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$randomGenerator.GetBytes($secretBytes)
+$randomGenerator.Dispose()
+[System.BitConverter]::ToString($secretBytes).Replace('-', '')
+```
+
+把输出的字符串填在 `.env.local` 的 `LOCAL_SETUP_KEY=` 后面，保存后再启动网站。`.env.example` 只列出变量名，不包含可直接使用的密钥；`.env.local` 是每台电脑自己的秘密文件，不要上传。网站运行不需要其他环境变量，也不需要单独安装数据库。第一次启动时会自动创建 SQLite 文件和示例公告。
 
 ## 启动开发版本
 
