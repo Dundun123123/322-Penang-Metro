@@ -13,18 +13,21 @@
 
 `data/` 和 `.env.local` 已被 Git 忽略，不应提交或分享。备份网站数据时，应同时备份整个 `data` 文件夹。
 
-## Windows 首次安装
+## Windows 本地部署（新电脑）
 
-要求 Node.js 22.12.0 或更新版本。打开 PowerShell：
+安装 Git 和 Node.js 22.12.0 或更新版本。打开 PowerShell，检查版本并克隆仓库：
 
 ```powershell
+git --version
 node --version
 npm --version
-cd D:\PenangLRTCommunityHub\site
+cd $env:USERPROFILE
+git clone https://github.com/Dundun123123/322-Penang-Metro.git
+cd .\322-Penang-Metro
 npm ci
 ```
 
-上面的 `D:\PenangLRTCommunityHub\site` 是当前电脑的路径；新电脑请替换成实际保存项目的路径。接着复制可公开上传的环境变量模板：
+如果想放在其他位置，请在 `git clone` 前切换到目标文件夹；如果 GitHub 要求登录，请使用有权访问该仓库的账号完成认证。下列命令都应在仓库根目录执行。复制可公开上传的环境变量模板：
 
 ```powershell
 Copy-Item .env.example .env.local
@@ -41,22 +44,28 @@ $randomGenerator.Dispose()
 [System.BitConverter]::ToString($secretBytes).Replace('-', '')
 ```
 
-把输出的字符串填在 `.env.local` 的 `LOCAL_SETUP_KEY=` 后面，保存后再启动网站。`.env.example` 只列出变量名，不包含可直接使用的密钥；`.env.local` 是每台电脑自己的秘密文件，不要上传。网站运行不需要其他环境变量，也不需要单独安装数据库。第一次启动时会自动创建 SQLite 文件和示例公告。
+把输出的字符串填在 `.env.local` 的 `LOCAL_SETUP_KEY=` 后面，保存。`.env.example` 只列出变量名，不包含可直接使用的密钥；`.env.local` 是每台电脑自己的秘密文件，不要上传。网站运行不需要其他环境变量，也不需要单独安装数据库。第一次启动时会自动创建 SQLite 文件和示例公告。
+
+构建并启动正式本地服务：
+
+```powershell
+npm run build
+npm start
+```
+
+电脑打开 `http://localhost:5173/`，施工团队入口是 `http://localhost:5173/team`。保持此 PowerShell 窗口运行；关闭窗口或让电脑休眠都会使网站暂时无法访问。停止服务时按 `Ctrl+C`。
+
+同一局域网的手机可以用这台电脑的 IPv4 地址访问。另开一个 PowerShell 窗口运行 `ipconfig`，找到当前 Wi-Fi 或以太网适配器的 IPv4 地址，然后在手机打开 `http://该地址:5173/`（例如 `http://192.168.31.174:5173/`）。也可以尝试 `http://电脑名称:5173/`，电脑名称用 `hostname` 查看；如果手机无法解析名称，请使用 IPv4 地址。电脑和手机必须处于同一可信局域网；Windows 防火墙询问时只允许“专用网络”，不要开放路由器的公网端口。地图底图和地点搜索仍需要互联网。
 
 ## 启动开发版本
 
+仅在修改代码时使用；先停止占用 5173 端口的正式服务，再在项目根目录运行：
+
 ```powershell
-cd D:\PenangLRTCommunityHub\site
 npm run dev
 ```
 
-电脑打开 `http://localhost:5173/`。网站默认监听所有本地网卡，所以同一局域网的手机可以打开 `http://电脑IPv4地址:5173/`。当前电脑地址可用下面命令查询：
-
-```powershell
-ipconfig
-```
-
-例如电脑 IPv4 是 `192.168.31.174`，手机就打开 `http://192.168.31.174:5173/`。电脑和手机必须处于同一 Wi-Fi／局域网。Windows 防火墙询问时只允许“专用网络”。
+开发模式同样使用 5173 端口，但正式展示建议使用上面的 `npm run build` 和 `npm start`。
 
 ## 创建账号
 
@@ -74,24 +83,29 @@ ipconfig
 
 已绘制的路段会一起显示在公告详情及“查看完整地图”页面。旧公告的单条路线会自动作为“路段 1”读取；地图底图和道路搜索需要联网。
 
-## 正式本地运行
+## 更新已经部署的网站
 
-先构建一次：
+先在运行网站的 PowerShell 窗口按 `Ctrl+C` 停止服务。在仓库根目录执行：
 
 ```powershell
-cd D:\PenangLRTCommunityHub\site
+git pull --ff-only
+npm ci
 npm run build
 npm start
 ```
 
-`npm start` 同样监听 `0.0.0.0:5173`，可从电脑和同一局域网手机访问。保持 PowerShell 窗口运行；停止时按 `Ctrl+C`。
+更新代码不会自动删除被 Git 忽略的 `.env.local` 和 `data/`，但更新前仍应备份数据。如果 `git pull --ff-only` 因本地代码改动而停止，不要强制覆盖；先处理本地改动。
+
+## 搬迁和备份数据
+
+GitHub 仓库只包含代码。居民账号、公告、报告和图片保存在项目根目录的 `data/`，密钥在 `.env.local`。搬迁到另一台电脑时，先停止旧电脑的网站，备份并复制**整个** `data/` 文件夹和 `.env.local` 到新电脑的仓库根目录，然后再启动新电脑的网站。不要只复制单个 `.db` 文件，也不要把这两个私有内容提交到 GitHub。
 
 ## 常见问题
 
 - 手机打不开：确认电脑与手机在同一网络，检查 Windows 防火墙是否允许 Node.js 访问专用网络，并确认路由器没有开启设备隔离。
 - 端口被占用：关闭原来的 Node.js 服务，再运行启动命令。
 - 忘记居民或团队密码：当前版本没有邮件找回功能。可由维护人员直接管理本地数据库，或删除 `data` 文件夹重新初始化；删除 `data` 会永久删除所有账号、公告、报告和图片，操作前务必备份。
-- 迁移电脑：复制整个项目，并额外确保 `data` 文件夹和 `.env.local` 一起复制。
+- 迁移电脑：先按上面的搬迁步骤停止旧服务，再复制完整的 `data/` 和 `.env.local`。
 - 外网访问：此配置只用于本机和可信局域网。不要把 5173 端口直接暴露到互联网；若要公开上线，需要 HTTPS、反向代理、备份和更严格的安全配置。
 
 ## 主要命令
