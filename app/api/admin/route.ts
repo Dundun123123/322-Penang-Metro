@@ -5,7 +5,9 @@ export async function GET() {
   return Response.json({
     signedIn: Boolean(user),
     email: user?.email,
-    isAdmin: user?.role === "team",
+    isAdmin: user?.role === "team" || user?.role === "authority",
+    role: user?.role,
+    department: user?.department,
     needsSetup: !teamExists(),
   });
 }

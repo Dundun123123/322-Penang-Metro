@@ -28,6 +28,15 @@ const copy = {
     back: "Back to community homepage",
     steps: ["Browse public summaries", "Sign in for full details", "Report and follow issues"],
     teamSteps: ["Verify information", "Publish a notice", "Respond to reports"],
+    authority: "Authority collaboration access",
+    authorityTitle: "Follow every issue through to a visible outcome.",
+    authorityBody:
+      "Authorised transport and local-authority collaborators can post staged responses and publish notices. Accounts are created by the project team.",
+    authoritySteps: [
+      "Review resident feedback",
+      "Record each response stage",
+      "Link a published notice",
+    ],
     working: "Please wait…",
   },
   zh: {
@@ -51,6 +60,11 @@ const copy = {
     back: "返回社区首页",
     steps: ["浏览公开概览", "登录查看完整详情", "提交并追踪问题"],
     teamSteps: ["核实信息", "发布公告", "处理报告"],
+    authority: "主管部门协作端",
+    authorityTitle: "让每个问题的处理过程清晰可见。",
+    authorityBody:
+      "交通部门和地方主管部门的获授权协作人员可逐步回执居民反馈并发布公告。账号由施工团队创建。",
+    authoritySteps: ["查看居民反馈", "逐阶段记录处理", "关联已发布公告"],
     working: "处理中…",
   },
   ms: {
@@ -76,6 +90,11 @@ const copy = {
     back: "Kembali ke laman komuniti",
     steps: ["Lihat ringkasan umum", "Log masuk untuk butiran", "Lapor dan ikuti isu"],
     teamSteps: ["Sahkan maklumat", "Terbitkan makluman", "Jawab laporan"],
+    authority: "Akses kerjasama pihak berkuasa",
+    authorityTitle: "Setiap isu diikuti sehingga ada hasil yang jelas.",
+    authorityBody:
+      "Wakil pengangkutan dan pihak berkuasa tempatan yang diberi akses boleh memberi respons berperingkat dan menerbitkan makluman. Akaun dicipta oleh pasukan projek.",
+    authoritySteps: ["Semak maklum balas", "Catat perkembangan", "Pautkan makluman terbitan"],
     working: "Sila tunggu…",
   },
 };
@@ -86,7 +105,7 @@ export default function AuthEntry({
   continueHref,
   teamSetupAvailable = false,
 }: {
-  audience: "community" | "team";
+  audience: "community" | "team" | "authority";
   signedIn: boolean;
   continueHref: string;
   teamSetupAvailable?: boolean;
@@ -94,6 +113,7 @@ export default function AuthEntry({
   const { locale, setLocale } = useLocale();
   const c = copy[locale];
   const team = audience === "team";
+  const authority = audience === "authority";
   const [mode, setMode] = useState<"login" | "register" | "setup">(
     team && teamSetupAvailable ? "setup" : "login",
   );
@@ -110,7 +130,7 @@ export default function AuthEntry({
       password: form.get("password"),
       name: form.get("name"),
       setupKey: form.get("setupKey"),
-      role: team ? "team" : "resident",
+      role: audience === "community" ? "resident" : audience,
     };
     try {
       const response = await fetch("/api/auth", {
@@ -132,10 +152,10 @@ export default function AuthEntry({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "logout" }),
     });
-    window.location.href = team ? "/team/login" : "/";
+    window.location.href = team ? "/team/login" : authority ? "/authority/login" : "/";
   }
   return (
-    <main className={`auth-page ${team ? "auth-team" : "auth-community"}`}>
+    <main className={`auth-page ${team || authority ? "auth-team" : "auth-community"}`}>
       <div className="auth-top">
         <Link href="/" className="auth-brand">
           <span className="brand-mark">M</span>
@@ -158,11 +178,11 @@ export default function AuthEntry({
       </div>
       <div className="auth-layout">
         <section className="auth-story">
-          <p className="auth-audience">{team ? c.team : c.community}</p>
-          <h1>{team ? c.teamTitle : c.communityTitle}</h1>
-          <p>{team ? c.teamBody : c.communityBody}</p>
+          <p className="auth-audience">{team ? c.team : authority ? c.authority : c.community}</p>
+          <h1>{team ? c.teamTitle : authority ? c.authorityTitle : c.communityTitle}</h1>
+          <p>{team ? c.teamBody : authority ? c.authorityBody : c.communityBody}</p>
           <ol className="auth-line">
-            {(team ? c.teamSteps : c.steps).map((item) => (
+            {(team ? c.teamSteps : authority ? c.authoritySteps : c.steps).map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ol>
@@ -170,7 +190,9 @@ export default function AuthEntry({
         <section className="auth-action">
           <div className="auth-action-inner">
             <span className="auth-mini-mark">M</span>
-            <h2>{mode === "setup" ? c.setup : team ? c.team : c.community}</h2>
+            <h2>
+              {mode === "setup" ? c.setup : team ? c.team : authority ? c.authority : c.community}
+            </h2>
             {signedIn ? (
               <>
                 <a className="button button-primary" href={continueHref}>
@@ -224,7 +246,7 @@ export default function AuthEntry({
                 )}
               </form>
             )}
-            {!team && !signedIn && (
+            {!team && !authority && !signedIn && (
               <button
                 className="auth-secondary auth-button-link"
                 onClick={() => {

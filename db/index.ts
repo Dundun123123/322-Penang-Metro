@@ -16,13 +16,40 @@ function initialise(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS notices (id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', title_en TEXT NOT NULL, title_zh TEXT, title_ms TEXT, body_en TEXT NOT NULL, body_zh TEXT, body_ms TEXT, location TEXT NOT NULL, start_at TEXT, end_at TEXT, diversion TEXT, latitude TEXT, longitude TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, reference TEXT NOT NULL UNIQUE, access_hash TEXT NOT NULL, owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL, contact_email TEXT, kind TEXT NOT NULL, location TEXT NOT NULL, description TEXT NOT NULL, photo_key TEXT, photo_type TEXT, status TEXT NOT NULL DEFAULT 'received', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS report_events (id TEXT PRIMARY KEY, report_id TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE, status TEXT NOT NULL, note_en TEXT NOT NULL, note_zh TEXT, note_ms TEXT, created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS notice_images (id TEXT PRIMARY KEY, notice_id TEXT NOT NULL REFERENCES notices(id) ON DELETE CASCADE, storage_key TEXT NOT NULL, mime_type TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS subscriptions (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, categories TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS report_events_report_idx ON report_events(report_id);
+    CREATE INDEX IF NOT EXISTS reports_created_idx ON reports(created_at DESC,id DESC);
+    CREATE INDEX IF NOT EXISTS report_events_report_created_idx ON report_events(report_id,created_at DESC,id DESC);
+    CREATE INDEX IF NOT EXISTS notice_images_notice_idx ON notice_images(notice_id);
   `);
   const noticeColumns = db.prepare("PRAGMA table_info(notices)").all() as Array<{ name: string }>;
   if (!noticeColumns.some((column) => column.name === "route_path"))
     db.exec("ALTER TABLE notices ADD COLUMN route_path TEXT");
+  if (!noticeColumns.some((column) => column.name === "progress_percent"))
+    db.exec("ALTER TABLE notices ADD COLUMN progress_percent INTEGER");
+  if (!noticeColumns.some((column) => column.name === "point_data"))
+    db.exec("ALTER TABLE notices ADD COLUMN point_data TEXT");
+  if (!noticeColumns.some((column) => column.name === "client_request_id"))
+    db.exec("ALTER TABLE notices ADD COLUMN client_request_id TEXT");
+  db.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS notices_client_request_idx ON notices(client_request_id) WHERE client_request_id IS NOT NULL",
+  );
+  const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (!userColumns.some((column) => column.name === "staff_kind"))
+    db.exec("ALTER TABLE users ADD COLUMN staff_kind TEXT");
+  if (!userColumns.some((column) => column.name === "department"))
+    db.exec("ALTER TABLE users ADD COLUMN department TEXT");
+  const eventColumns = db.prepare("PRAGMA table_info(report_events)").all() as Array<{
+    name: string;
+  }>;
+  if (!eventColumns.some((column) => column.name === "actor_name"))
+    db.exec("ALTER TABLE report_events ADD COLUMN actor_name TEXT");
+  if (!eventColumns.some((column) => column.name === "actor_role"))
+    db.exec("ALTER TABLE report_events ADD COLUMN actor_role TEXT");
+  if (!eventColumns.some((column) => column.name === "notice_id"))
+    db.exec("ALTER TABLE report_events ADD COLUMN notice_id TEXT");
   const count = db.prepare("SELECT COUNT(*) AS count FROM notices").get() as { count: number };
   if (count.count === 0) seedNotices(db);
 }

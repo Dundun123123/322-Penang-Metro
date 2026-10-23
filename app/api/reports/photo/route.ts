@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getDb, localDataDirectory } from "@/db";
-import { getLocalUser, teamUser } from "@/lib/auth";
+import { getLocalUser } from "@/lib/auth";
 import { jsonError, trim } from "@/lib/server";
 export const runtime = "nodejs";
 export async function GET(request: Request) {
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     { ownerUserId: string | null; photoKey: string | null; photoType: string | null } | undefined;
   if (!row?.photoKey) return jsonError("Photo not found", 404);
   const user = await getLocalUser();
-  if (!(await teamUser()) && (!user || row.ownerUserId !== user.id))
+  if (user?.role !== "team" && user?.role !== "authority" && (!user || row.ownerUserId !== user.id))
     return jsonError("Forbidden", 403);
   const filename = path.join(localDataDirectory, "uploads", path.basename(row.photoKey));
   if (!fs.existsSync(filename)) return jsonError("Photo not found", 404);

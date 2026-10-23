@@ -1,8 +1,8 @@
 import { randomBytes, createHash } from "node:crypto";
-import { teamUser } from "@/lib/auth";
+import { staffUser } from "@/lib/auth";
 export const validKinds = ["closure", "schedule", "transport", "safety", "business"] as const;
 export const validStatuses = ["received", "reviewing", "assigned", "resolved", "closed"] as const;
-export const adminUser = teamUser;
+export const adminUser = staffUser;
 export function jsonError(message: string, status = 400) {
   return Response.json({ error: message }, { status });
 }

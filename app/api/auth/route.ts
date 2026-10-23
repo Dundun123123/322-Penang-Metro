@@ -64,17 +64,33 @@ export async function POST(request: Request) {
   if (action === "login") {
     const expectedRole = trim(input.role, 20);
     const row = db
-      .prepare("SELECT id,email,name,password_hash AS passwordHash,role FROM users WHERE email=?")
+      .prepare(
+        "SELECT id,email,name,password_hash AS passwordHash,role,staff_kind AS staffKind FROM users WHERE email=?",
+      )
       .get(email) as
-      { id: string; email: string; name: string; passwordHash: string; role: string } | undefined;
+      | {
+          id: string;
+          email: string;
+          name: string;
+          passwordHash: string;
+          role: string;
+          staffKind: string | null;
+        }
+      | undefined;
     if (!row || !verifyPassword(password, row.passwordHash))
       return jsonError("Email or password is incorrect", 401);
-    if (expectedRole === "team" && row.role !== "team")
+    const actualRole =
+      row.role === "team" && row.staffKind === "authority" ? "authority" : row.role;
+    if (!["resident", "team", "authority"].includes(expectedRole))
+      return jsonError("Choose a valid login portal", 400);
+    if (expectedRole === "team" && actualRole !== "team")
       return jsonError("This account does not have construction team access", 403);
-    if (expectedRole === "resident" && row.role !== "resident")
-      return jsonError("Use the construction team login for this account", 403);
+    if (expectedRole === "authority" && actualRole !== "authority")
+      return jsonError("This account does not have authority workspace access", 403);
+    if (expectedRole === "resident" && actualRole !== "resident")
+      return jsonError("Use the staff login for this account", 403);
     await createSession(row.id);
-    return Response.json({ ok: true, role: row.role });
+    return Response.json({ ok: true, role: actualRole });
   }
   return jsonError("Unknown authentication action");
 }

@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
   const events = getDb()
     .prepare(
-      `SELECT id,status,note_en AS noteEn,note_zh AS noteZh,note_ms AS noteMs,created_at AS createdAt FROM report_events WHERE report_id=? ORDER BY created_at`,
+      `SELECT e.id,e.status,e.note_en AS noteEn,e.note_zh AS noteZh,e.note_ms AS noteMs,e.actor_name AS actorName,e.actor_role AS actorRole,CASE WHEN n.status='published' THEN e.notice_id ELSE NULL END AS noticeId,CASE WHEN n.status='published' THEN n.title_en ELSE NULL END AS noticeTitle,e.created_at AS createdAt FROM report_events e LEFT JOIN notices n ON n.id=e.notice_id WHERE e.report_id=? ORDER BY e.created_at`,
     )
     .all(row.id);
   const report = {

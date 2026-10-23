@@ -4,7 +4,13 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { getDb } from "@/db";
 
 const COOKIE_NAME = "mutiara_session";
-export type LocalUser = { id: string; email: string; name: string; role: "resident" | "team" };
+export type LocalUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: "resident" | "team" | "authority";
+  department: string | null;
+};
 
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
@@ -24,7 +30,7 @@ export async function getLocalUser(): Promise<LocalUser | null> {
   return (
     (getDb()
       .prepare(
-        `SELECT u.id,u.email,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>?`,
+        `SELECT u.id,u.email,u.name,CASE WHEN u.role='team' AND u.staff_kind='authority' THEN 'authority' ELSE u.role END AS role,u.department FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>?`,
       )
       .get(id, new Date().toISOString()) as LocalUser | undefined) || null
   );
@@ -69,6 +75,20 @@ export async function teamUser() {
   const user = await getLocalUser();
   return user?.role === "team" ? user : null;
 }
+export async function authorityUser() {
+  const user = await getLocalUser();
+  return user?.role === "authority" ? user : null;
+}
+export async function staffUser() {
+  const user = await getLocalUser();
+  return user?.role === "team" || user?.role === "authority" ? user : null;
+}
 export function teamExists() {
-  return Boolean(getDb().prepare("SELECT 1 FROM users WHERE role='team' LIMIT 1").get());
+  return Boolean(
+    getDb()
+      .prepare(
+        "SELECT 1 FROM users WHERE role='team' AND COALESCE(staff_kind,'team')='team' LIMIT 1",
+      )
+      .get(),
+  );
 }

@@ -2,6 +2,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { kinds, issueKinds, languageNames, locales, localText } from "@/lib/i18n";
 import { useLocale } from "@/lib/use-locale";
+import { remainingDays } from "@/lib/notice-features";
 
 type Notice = {
   id: string;
@@ -19,6 +20,7 @@ type Notice = {
   diversion?: string | null;
   latitude?: string | null;
   longitude?: string | null;
+  progressPercent?: number | null;
   createdAt: string;
 };
 type Report = {
@@ -36,6 +38,10 @@ type Event = {
   noteEn: string;
   noteZh?: string | null;
   noteMs?: string | null;
+  actorName?: string | null;
+  actorRole?: string | null;
+  noticeId?: string | null;
+  noticeTitle?: string | null;
   createdAt: string;
 };
 
@@ -175,10 +181,41 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
             <dd>
               {notice.startAt
                 ? `${formatDate(notice.startAt)}${notice.endAt ? " – " + formatDate(notice.endAt) : ""}`
-                : t("dateUnknown")}
+                : notice.endAt
+                  ? formatDate(notice.endAt)
+                  : t("dateUnknown")}
             </dd>
           </div>
         </dl>
+        {notice.kind === "schedule" &&
+          notice.progressPercent !== null &&
+          notice.progressPercent !== undefined && (
+            <div className="card-progress">
+              <div>
+                <b>{t("constructionProgress")}</b>
+                <span>{notice.progressPercent}%</span>
+              </div>
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-label={t("constructionProgress")}
+                aria-valuenow={notice.progressPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <span style={{ width: `${notice.progressPercent}%` }} />
+              </div>
+              {notice.endAt &&
+                notice.progressPercent < 100 &&
+                remainingDays(notice.endAt) !== null && (
+                  <small>
+                    {remainingDays(notice.endAt)! < 0
+                      ? t("completionOverdue")
+                      : `${t("daysRemaining")}: ${remainingDays(notice.endAt)}`}
+                  </small>
+                )}
+            </div>
+          )}
         <a className="notice-detail-link" href={detailHref}>
           {signedIn ? t("readDetails") : t("signInForDetails")} <span aria-hidden="true">↗</span>
         </a>
@@ -429,6 +466,34 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
                   <span className="pill">{t(trackData.report.status)}</span>
                 </div>
                 <p>{trackData.report.description}</p>
+                <div
+                  className="receipt-progress"
+                  aria-label={
+                    locale === "zh"
+                      ? "处理进度"
+                      : locale === "ms"
+                        ? "Kemajuan respons"
+                        : "Response progress"
+                  }
+                >
+                  {["received", "reviewing", "assigned", "resolved", "closed"].map(
+                    (stage, index) => (
+                      <span
+                        key={stage}
+                        className={
+                          index <=
+                          ["received", "reviewing", "assigned", "resolved", "closed"].indexOf(
+                            trackData.report.status,
+                          )
+                            ? "done"
+                            : ""
+                        }
+                      >
+                        {index + 1}. {t(stage)}
+                      </span>
+                    ),
+                  )}
+                </div>
                 <h4>{t("timeline")}</h4>
                 <ol className="timeline">
                   {trackData.events.map((item) => (
@@ -443,6 +508,26 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
                             ? item.noteMs || item.noteEn
                             : item.noteEn}
                       </span>
+                      {item.actorName && (
+                        <small>
+                          {locale === "zh"
+                            ? "回执人"
+                            : locale === "ms"
+                              ? "Respons oleh"
+                              : "Response by"}
+                          : {item.actorName}
+                        </small>
+                      )}
+                      {item.noticeId && item.noticeTitle && (
+                        <a className="map-link" href={`/updates/${item.noticeId}`}>
+                          {locale === "zh"
+                            ? "查看相关公告"
+                            : locale === "ms"
+                              ? "Lihat makluman berkaitan"
+                              : "View related notice"}
+                          : {item.noticeTitle} ↗
+                        </a>
+                      )}
                     </li>
                   ))}
                 </ol>
@@ -517,6 +602,7 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
         <span>{t("footer")}</span>
         <span>{t("privacy")}</span>
         <a href="/team/login">{t("teamPortal")}</a>
+        <a href="/authority/login">{t("authorityPortal")}</a>
       </footer>
     </div>
   );

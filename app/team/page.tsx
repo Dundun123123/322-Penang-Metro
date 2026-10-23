@@ -6,5 +6,5 @@ export const dynamic = "force-dynamic";
 
 export default async function TeamPage() {
   if (!(await teamUser())) redirect("/team/login");
-  return <AdminApp />;
+  return <AdminApp role="team" />;
 }
