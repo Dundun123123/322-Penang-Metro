@@ -10,19 +10,25 @@ export async function GET(request: Request) {
   const all = new URL(request.url).searchParams.get("all") === "1";
   if (all && !(await adminUser())) return jsonError("Forbidden", 403);
   const columns = all || (await getLocalUser()) ? fullColumns : summaryColumns;
-  const rows = getDb()
+  const rows = await getDb()
     .prepare(
       `SELECT ${columns} FROM notices ${all ? "" : "WHERE status='published'"} ORDER BY created_at DESC LIMIT ?`,
     )
     .all(all ? 200 : 100);
-  const notices = (rows as Array<{ id: string }>).map((notice) => ({
+  const typedRows = rows as Array<{ id: string }>;
+  const images =
+    columns === summaryColumns || !typedRows.length
+      ? []
+      : await getDb()
+          .prepare(
+            `SELECT id,notice_id FROM notice_images WHERE notice_id IN (${typedRows.map(() => "?").join(",")}) ORDER BY created_at`,
+          )
+          .all(...typedRows.map((notice) => notice.id));
+  const notices = typedRows.map((notice) => ({
     ...notice,
-    images:
-      columns === summaryColumns
-        ? []
-        : getDb()
-            .prepare("SELECT id FROM notice_images WHERE notice_id=? ORDER BY created_at")
-            .all(notice.id),
+    images: images
+      .filter((image) => image.notice_id === notice.id)
+      .map((image) => ({ id: image.id })),
   }));
   return Response.json({ notices });
 }
@@ -62,15 +68,15 @@ export async function POST(request: Request) {
   );
   if (featureError) return jsonError(featureError);
   if (clientRequestId) {
-    const prior = getDb()
+    const prior = (await getDb()
       .prepare("SELECT id FROM notices WHERE client_request_id=?")
-      .get(clientRequestId) as { id: string } | undefined;
+      .get(clientRequestId)) as { id: string } | undefined;
     if (prior) return Response.json({ notice: { id: prior.id, reused: true } });
   }
   const now = new Date().toISOString(),
     id = crypto.randomUUID();
   try {
-    getDb()
+    await getDb()
       .prepare(
         `INSERT INTO notices (id,kind,status,title_en,title_zh,title_ms,body_en,body_zh,body_ms,location,start_at,end_at,diversion,latitude,longitude,route_path,progress_percent,point_data,client_request_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
@@ -99,9 +105,9 @@ export async function POST(request: Request) {
       );
   } catch (error) {
     const prior = clientRequestId
-      ? (getDb()
+      ? ((await getDb()
           .prepare("SELECT id FROM notices WHERE client_request_id=?")
-          .get(clientRequestId) as { id: string } | undefined)
+          .get(clientRequestId)) as { id: string } | undefined)
       : undefined;
     if (prior) return Response.json({ notice: { id: prior.id, reused: true } });
     throw error;
@@ -122,7 +128,7 @@ export async function PATCH(request: Request) {
     routePath = validRoutePath(x.routePath),
     progressPercent = validProgress(x.progressPercent),
     pointData = validPointData(x.pointData);
-  if (!getDb().prepare("SELECT 1 FROM notices WHERE id=?").get(id))
+  if (!(await getDb().prepare("SELECT 1 FROM notices WHERE id=?").get(id)))
     return jsonError("Notice not found", 404);
   if (
     !validKinds.includes(kind as never) ||
@@ -144,7 +150,7 @@ export async function PATCH(request: Request) {
     x.endAt,
   );
   if (featureError) return jsonError(featureError);
-  getDb()
+  await getDb()
     .prepare(
       `UPDATE notices SET kind=?,status=?,title_en=?,title_zh=?,title_ms=?,body_en=?,body_zh=?,body_ms=?,location=?,start_at=?,end_at=?,diversion=?,latitude=?,longitude=?,route_path=?,progress_percent=?,point_data=?,updated_at=? WHERE id=?`,
     )

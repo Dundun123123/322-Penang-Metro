@@ -5,9 +5,9 @@ export const runtime = "nodejs";
 export async function GET() {
   const user = await getLocalUser();
   if (!user) return jsonError("Sign in is required", 401);
-  const row = getDb()
+  const row = (await getDb()
     .prepare("SELECT categories FROM subscriptions WHERE user_id=?")
-    .get(user.id) as { categories: string } | undefined;
+    .get(user.id)) as { categories: string } | undefined;
   return Response.json({ categories: row ? JSON.parse(row.categories) : [] });
 }
 export async function PUT(request: Request) {
@@ -21,9 +21,9 @@ export async function PUT(request: Request) {
   )
     return jsonError("Invalid categories");
   const categories = JSON.stringify([...new Set(body.categories as string[])]);
-  getDb()
+  await getDb()
     .prepare(
-      `INSERT INTO subscriptions (user_id,categories,updated_at) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET categories=excluded.categories,updated_at=excluded.updated_at`,
+      `INSERT INTO subscriptions (user_id,categories,updated_at) VALUES (?,?,?) AS incoming ON DUPLICATE KEY UPDATE categories=incoming.categories,updated_at=incoming.updated_at`,
     )
     .run(user.id, categories, new Date().toISOString());
   return Response.json({ categories: JSON.parse(categories) });

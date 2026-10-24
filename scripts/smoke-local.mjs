@@ -1,142 +1,238 @@
-import Database from "better-sqlite3";
-import path from "node:path";
-
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import nextEnv from "@next/env";
+import mysql from "mysql2/promise";
+nextEnv.loadEnvConfig(process.cwd());
+if (process.env.SMOKE_ALLOW_WRITES !== "1" || !/test/i.test(process.env.DB_NAME || ""))
+  throw new Error(
+    "Use an isolated DB_NAME containing test and set SMOKE_ALLOW_WRITES=1. Never run against the shared project database.",
+  );
 const base = process.env.SMOKE_BASE_URL || "http://127.0.0.1:5173";
-const setupKey = process.env.LOCAL_SETUP_KEY;
-if (!setupKey)
-  throw new Error("Set LOCAL_SETUP_KEY in the environment before running this smoke test");
-const stamp = Date.now();
+const second = process.env.SMOKE_SECOND_BASE_URL || "http://127.0.0.1:5174";
+assert.notEqual(base, second, "Start two website instances connected to the same test database");
+const db = await mysql.createConnection({
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT || 3306),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+});
+const stamp = randomUUID();
 const residentEmail = `resident-${stamp}@local.test`,
   teamEmail = `team-${stamp}@local.test`,
-  password = "LocalTest!2026";
-let residentCookie = "",
-  teamCookie = "",
-  noticeId = "",
-  reportReference = "";
-async function request(route, { cookie = "", ...options } = {}) {
-  const headers = { Origin: base, ...(options.headers || {}) };
+  authorityEmail = `authority-${stamp}@local.test`;
+const password = "SharedTest!2026";
+let noticeId = "",
+  reportReference = "",
+  uploadId = "";
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=",
+  "base64",
+);
+async function request(host, route, { cookie = "", json, ...options } = {}) {
+  const headers = { Origin: host, ...options.headers };
   if (cookie) headers.Cookie = cookie;
-  const response = await fetch(base + route, { ...options, headers, redirect: "manual" });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(`${response.status} ${route}: ${JSON.stringify(body)}`);
-  return { response, body, cookie: response.headers.get("set-cookie")?.split(";")[0] || cookie };
+  if (json) {
+    headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(json);
+  }
+  const response = await fetch(host + route, { ...options, headers, redirect: "manual" });
+  const body = await response.json();
+  assert.ok(response.ok, `${response.status} ${route}: ${JSON.stringify(body)}`);
+  return { body, cookie: response.headers.get("set-cookie")?.split(";")[0] || cookie };
+}
+async function checkImage(host, route, cookie) {
+  const r = await fetch(host + route, { headers: { Cookie: cookie } });
+  assert.equal(r.status, 200);
+  assert.deepEqual(Buffer.from(await r.arrayBuffer()), png);
 }
 try {
-  const guest = await request("/api/notices");
-  if (!guest.body.notices.length || guest.body.notices[0].bodyEn)
-    throw new Error("Guest notice summaries are incorrect");
-  let result = await request("/api/auth", {
+  // Require a fresh isolated database; both website processes must use these test credentials.
+  const [existing] = await db.query("SELECT COUNT(*) AS count FROM users WHERE role='team'");
+  assert.equal(Number(existing[0].count), 0, "Use a fresh test database with no team accounts");
+  const team = await request(base, "/api/auth", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    json: {
       action: "setup-team",
       name: "QA Team",
       email: teamEmail,
       password,
-      setupKey,
-    }),
+      setupKey: process.env.LOCAL_SETUP_KEY,
+    },
   });
-  teamCookie = result.cookie;
-  result = await request("/api/auth", {
+  const [teamRows] = await db.query("SELECT id FROM users WHERE email=?", [teamEmail]);
+  assert.equal(teamRows.length, 1, "First website must point to this test database");
+  const resident = await request(second, "/api/auth", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action: "register",
-      name: "QA Resident",
-      email: residentEmail,
-      password,
-    }),
+    json: { action: "register", name: "共享测试居民", email: residentEmail, password },
   });
-  residentCookie = result.cookie;
-  const full = await request("/api/notices", { cookie: residentCookie });
-  if (!full.body.notices[0].bodyEn)
-    throw new Error("Signed-in resident cannot read notice content");
-  result = await request("/api/notices", {
-    cookie: teamCookie,
+  const [resRows] = await db.query("SELECT id FROM users WHERE email=?", [residentEmail]);
+  assert.equal(resRows.length, 1, "Second website must point to this test database");
+  const login = await request(base, "/api/auth", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      kind: "closure",
-      status: "published",
-      titleEn: `QA notice ${stamp}`,
-      bodyEn: "Temporary QA construction notice.",
-      location: "QA location",
-    }),
+    json: { action: "login", role: "resident", email: residentEmail, password },
   });
-  noticeId = result.body.notice.id;
-  const detail = await fetch(`${base}/updates/${noticeId}`, {
-    headers: { Cookie: residentCookie },
-    redirect: "manual",
+  assert.equal(
+    (await request(second, "/api/auth", { cookie: login.cookie })).body.user.name,
+    "共享测试居民",
+  );
+  await request(base, "/api/admin/authorities", {
+    cookie: team.cookie,
+    method: "POST",
+    json: { name: "QA Authority", email: authorityEmail, password, department: "transport" },
   });
-  if (detail.status !== 200) throw new Error(`Resident detail returned ${detail.status}`);
+  const authority = await request(second, "/api/auth", {
+    method: "POST",
+    json: { action: "login", role: "authority", email: authorityEmail, password },
+  });
+  const notice = {
+    kind: "closure",
+    status: "published",
+    titleEn: `QA ${stamp}`,
+    titleZh: "跨电脑共享公告",
+    bodyEn: "Shared MySQL notice.",
+    location: "QA location",
+    routePath: JSON.stringify([
+      [
+        [5.4, 100.3],
+        [5.41, 100.31],
+      ],
+    ]),
+    clientRequestId: randomUUID(),
+  };
+  const created = await request(base, "/api/notices", {
+    cookie: team.cookie,
+    method: "POST",
+    json: notice,
+  });
+  noticeId = created.body.notice.id;
+  assert.equal(
+    (
+      await request(second, "/api/notices", {
+        cookie: authority.cookie,
+        method: "POST",
+        json: notice,
+      })
+    ).body.notice.id,
+    noticeId,
+    "Idempotent notice creation across instances",
+  );
+  assert.ok(
+    (await request(second, "/api/notices", { cookie: resident.cookie })).body.notices.some(
+      (n) => n.id === noticeId,
+    ),
+  );
+  const guest = (await request(second, "/api/notices")).body.notices.find((n) => n.id === noticeId);
+  assert.equal(guest.bodyEn, undefined, "Guest gets only a summary");
+  const imageForm = new FormData();
+  uploadId = randomUUID();
+  imageForm.set("noticeId", noticeId);
+  imageForm.set("uploadId", uploadId);
+  imageForm.set("image", new Blob([png], { type: "image/png" }), "test.png");
+  await request(base, "/api/notices/images", {
+    cookie: team.cookie,
+    method: "POST",
+    body: imageForm,
+  });
+  await checkImage(second, `/api/notices/images?id=${uploadId}`, resident.cookie);
+  assert.equal(
+    (
+      await request(second, "/api/notices/images", {
+        cookie: authority.cookie,
+        method: "POST",
+        body: imageForm,
+      })
+    ).body.alreadyUploaded,
+    true,
+  );
+  assert.equal((await fetch(second + `/api/notices/images?id=${uploadId}`)).status, 403);
   const form = new FormData();
   form.set("kind", "safety");
-  form.set("location", "QA local location");
-  form.set("description", "A temporary local safety report for integration testing.");
-  form.set(
-    "photo",
-    new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], { type: "image/png" }),
-    "qa.png",
-  );
-  result = await request("/api/reports", { cookie: residentCookie, method: "POST", body: form });
-  reportReference = result.body.reference;
-  await request("/api/admin/reports", {
-    cookie: teamCookie,
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      reference: reportReference,
-      status: "reviewing",
-      noteEn: "QA review started.",
-    }),
-  });
-  const tracked = await request("/api/reports/track", {
-    cookie: residentCookie,
+  form.set("location", "QA shared location");
+  form.set("description", "A report created on the second website instance.");
+  form.set("photo", new Blob([png], { type: "image/png" }), "report.png");
+  const report = await request(second, "/api/reports", {
+    cookie: resident.cookie,
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ reference: reportReference }),
+    body: form,
   });
-  if (tracked.body.report.status !== "reviewing") throw new Error("Report status was not updated");
-  await request("/api/subscriptions", {
-    cookie: residentCookie,
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ categories: ["closure", "safety"] }),
+  reportReference = report.body.reference;
+  await checkImage(base, `/api/reports/photo?reference=${reportReference}`, team.cookie);
+  await request(base, "/api/admin/reports", {
+    cookie: team.cookie,
+    method: "PATCH",
+    json: {
+      reference: reportReference,
+      status: "resolved",
+      noteEn: "Resolved on another computer.",
+      noticeId,
+    },
   });
+  const tracked = await request(second, "/api/reports/track", {
+    cookie: resident.cookie,
+    method: "POST",
+    json: { reference: reportReference },
+  });
+  assert.equal(tracked.body.report.status, "resolved");
+  assert.equal(tracked.body.events.length, 2);
+  assert.equal(tracked.body.events[1].noticeId, noticeId);
+  for (const categories of [["closure"], ["safety", "transport"]])
+    await request(base, "/api/subscriptions", {
+      cookie: login.cookie,
+      method: "PUT",
+      json: { categories },
+    });
+  assert.deepEqual(
+    (await request(second, "/api/subscriptions", { cookie: resident.cookie })).body.categories,
+    ["safety", "transport"],
+  );
+  assert.equal(
+    (await fetch(second + `/updates/${noticeId}`, { headers: { Cookie: resident.cookie } })).status,
+    200,
+  );
+  assert.equal(
+    (await fetch(second + `/updates/${noticeId}/map`, { headers: { Cookie: resident.cookie } }))
+      .status,
+    200,
+  );
+  await request(second, `/api/notices/images?id=${uploadId}`, {
+    cookie: authority.cookie,
+    method: "DELETE",
+  });
+  assert.equal(
+    (
+      await fetch(base + `/api/notices/images?id=${uploadId}`, {
+        headers: { Cookie: resident.cookie },
+      })
+    ).status,
+    404,
+  );
   console.log(
-    JSON.stringify({
-      ok: true,
-      guestSummary: true,
-      residentLogin: true,
-      teamLogin: true,
-      noticeDetail: true,
-      photoUpload: true,
-      reportStatus: tracked.body.report.status,
-      subscriptions: true,
-    }),
+    "PASS: two instances share accounts, sessions, roles, notices, idempotency, images, reports, events, subscriptions and detail pages.",
   );
 } finally {
-  const db = new Database(path.join(process.cwd(), "data", "mutiara-community.db"));
-  if (reportReference) {
-    const row = db
-      .prepare("SELECT id,photo_key AS photoKey FROM reports WHERE reference=?")
-      .get(reportReference);
-    if (row) {
-      db.prepare("DELETE FROM report_events WHERE report_id=?").run(row.id);
-      db.prepare("DELETE FROM reports WHERE id=?").run(row.id);
-      if (row.photoKey) {
-        const fs = await import("node:fs");
-        fs.rmSync(path.join(process.cwd(), "data", "uploads", row.photoKey), { force: true });
-      }
-    }
+  // Delete only this run's UUID-labelled records.
+  const [reports] = await db.query(
+    "SELECT id,photo_key FROM reports WHERE owner_user_id IN (SELECT id FROM users WHERE email=?)",
+    [residentEmail],
+  );
+  for (const row of reports) {
+    await db.query("DELETE FROM reports WHERE id=?", [row.id]);
+    if (row.photo_key)
+      await db.query("DELETE FROM uploaded_files WHERE storage_key=?", [row.photo_key]);
   }
-  if (noticeId) db.prepare("DELETE FROM notices WHERE id=?").run(noticeId);
-  db.prepare(
-    "DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email IN (?,?))",
-  ).run(residentEmail, teamEmail);
-  db.prepare(
-    "DELETE FROM subscriptions WHERE user_id IN (SELECT id FROM users WHERE email IN (?,?))",
-  ).run(residentEmail, teamEmail);
-  db.prepare("DELETE FROM users WHERE email IN (?,?)").run(residentEmail, teamEmail);
-  db.close();
+  if (noticeId) {
+    const [images] = await db.query("SELECT storage_key FROM notice_images WHERE notice_id=?", [
+      noticeId,
+    ]);
+    await db.query("DELETE FROM notices WHERE id=?", [noticeId]);
+    for (const image of images)
+      await db.query("DELETE FROM uploaded_files WHERE storage_key=?", [image.storage_key]);
+  }
+  await db.query("DELETE FROM users WHERE email IN (?,?,?)", [
+    residentEmail,
+    teamEmail,
+    authorityEmail,
+  ]);
+  await db.end();
 }

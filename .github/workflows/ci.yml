@@ -13,6 +13,28 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-ci-root
+          MYSQL_ROOT_HOST: "%"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-ci-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_NAME: metro_shared_test
+      DB_USER: metro_test
+      DB_PASSWORD: isolated-ci-app
+      LOCAL_SETUP_KEY: isolated-ci-setup
+      SMOKE_ALLOW_WRITES: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -39,3 +61,38 @@ jobs:
 
       - name: Build application
         run: npm run build
+
+      - name: Prepare isolated MySQL database
+        run: |
+          node --input-type=module <<'JS'
+          import mysql from 'mysql2/promise';
+          import fs from 'node:fs';
+          const db = await mysql.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT),user:'root',password:'isolated-ci-root',multipleStatements:true});
+          await db.query(fs.readFileSync('db/mysql/schema.sql','utf8').replaceAll('penang_metro','metro_shared_test'));
+          await db.query("CREATE USER 'metro_test'@'%' IDENTIFIED BY 'isolated-ci-app'; GRANT SELECT,INSERT,UPDATE,DELETE ON metro_shared_test.* TO 'metro_test'@'%';");
+          await db.end();
+          JS
+          npm run db:check
+
+      - name: Verify shared data across two website processes
+        run: |
+          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 5173 > /tmp/metro-first.log 2>&1 &
+          FIRST_PID=$!
+          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 5174 > /tmp/metro-second.log 2>&1 &
+          SECOND_PID=$!
+          trap 'kill "$FIRST_PID" "$SECOND_PID" 2>/dev/null || true' EXIT
+          node --input-type=module <<'JS'
+          for (const port of [5173,5174]) {
+            let ready=false;
+            for(let attempt=0;attempt<40;attempt++) {
+              try { if((await fetch(`http://127.0.0.1:${port}/api/auth`)).ok) { ready=true;break; } } catch {}
+              await new Promise(resolve=>setTimeout(resolve,500));
+            }
+            if(!ready) throw new Error(`Website on ${port} did not become ready`);
+          }
+          JS
+          npm run test:shared
+
+      - name: Show website logs on failure
+        if: failure()
+        run: cat /tmp/metro-first.log /tmp/metro-second.log 2>/dev/null || true

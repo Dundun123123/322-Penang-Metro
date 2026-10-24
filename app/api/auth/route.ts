@@ -15,7 +15,7 @@ export async function GET() {
   const user = await getLocalUser();
   return Response.json({
     user: user ? { email: user.email, name: user.name, role: user.role } : null,
-    teamSetupAvailable: !teamExists(),
+    teamSetupAvailable: !(await teamExists()),
   });
 }
 
@@ -36,38 +36,53 @@ export async function POST(request: Request) {
   if (action === "register") {
     const name = trim(input.name, 120);
     if (name.length < 2) return jsonError("Enter your name");
-    if (db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
+    if (await db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
       return jsonError("An account with this email already exists", 409);
     const id = crypto.randomUUID();
-    db.prepare(
-      "INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?,?,?)",
-    ).run(id, email, name, hashPassword(password), "resident", new Date().toISOString());
+    await db
+      .prepare(
+        "INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?,?,?)",
+      )
+      .run(id, email, name, hashPassword(password), "resident", new Date().toISOString());
     await createSession(id);
     return Response.json({ ok: true, role: "resident" }, { status: 201 });
   }
   if (action === "setup-team") {
-    if (teamExists()) return jsonError("The first team account has already been created", 409);
     const setupKey = trim(input.setupKey, 200);
     if (!process.env.LOCAL_SETUP_KEY || setupKey !== process.env.LOCAL_SETUP_KEY)
       return jsonError("The local setup key is incorrect", 403);
     const name = trim(input.name, 120);
     if (name.length < 2) return jsonError("Enter the team member name");
-    if (db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
-      return jsonError("An account with this email already exists", 409);
     const id = crypto.randomUUID();
-    db.prepare(
-      "INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?,?,?)",
-    ).run(id, email, name, hashPassword(password), "team", new Date().toISOString());
+    const error = await db.withLock("metro-first-team", async (db) => {
+      if (
+        await db
+          .prepare(
+            "SELECT 1 FROM users WHERE role='team' AND COALESCE(staff_kind,'team')='team' LIMIT 1",
+          )
+          .get()
+      )
+        return "The first team account has already been created";
+      if (await db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
+        return "An account with this email already exists";
+      await db
+        .prepare(
+          "INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?,?,?)",
+        )
+        .run(id, email, name, hashPassword(password), "team", new Date().toISOString());
+      return null;
+    });
+    if (error) return jsonError(error, 409);
     await createSession(id);
     return Response.json({ ok: true, role: "team" }, { status: 201 });
   }
   if (action === "login") {
     const expectedRole = trim(input.role, 20);
-    const row = db
+    const row = (await db
       .prepare(
         "SELECT id,email,name,password_hash AS passwordHash,role,staff_kind AS staffKind FROM users WHERE email=?",
       )
-      .get(email) as
+      .get(email)) as
       | {
           id: string;
           email: string;

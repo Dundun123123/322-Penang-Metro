@@ -1,6 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
-import { getDb, localDataDirectory } from "@/db";
+import { saveUpload } from "@/lib/uploads";
+import { getDb } from "@/db";
 import { getLocalUser } from "@/lib/auth";
 import { isEmail, jsonError, randomHex, sameOrigin, sha256, trim } from "@/lib/server";
 export const runtime = "nodejs";
@@ -43,48 +42,52 @@ export async function POST(request: Request) {
       ] || "bin";
     photoKey = `${id}.${ext}`;
     photoType = file.type;
-    const uploadDirectory = path.join(localDataDirectory, "uploads");
-    fs.mkdirSync(uploadDirectory, { recursive: true });
-    fs.writeFileSync(path.join(uploadDirectory, photoKey), Buffer.from(await file.arrayBuffer()));
   }
+  const photoBytes =
+    file instanceof File && file.size > 0 ? Buffer.from(await file.arrayBuffer()) : null;
   const now = new Date().toISOString(),
     db = getDb();
-  db.transaction(() => {
-    db.prepare(
-      `INSERT INTO reports (id,reference,access_hash,owner_user_id,contact_email,kind,location,description,photo_key,photo_type,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      reference,
-      accessHash,
-      user.id,
-      contactEmail || user.email,
-      kind,
-      location,
-      description,
-      photoKey,
-      photoType,
-      "received",
-      now,
-      now,
-    );
-    db.prepare(
-      `INSERT INTO report_events (id,report_id,status,note_en,note_zh,note_ms,created_at) VALUES (?,?,?,?,?,?,?)`,
-    ).run(
-      crypto.randomUUID(),
-      id,
-      "received",
-      "Report received and awaiting review.",
-      "报告已收到，等待项目组审核。",
-      "Laporan diterima dan menunggu semakan pasukan projek.",
-      now,
-    );
-  })();
+  await db.transaction(async (db) => {
+    if (photoKey && photoType && photoBytes) await saveUpload(db, photoKey, photoType, photoBytes);
+    await db
+      .prepare(
+        `INSERT INTO reports (id,reference,access_hash,owner_user_id,contact_email,kind,location,description,photo_key,photo_type,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        id,
+        reference,
+        accessHash,
+        user.id,
+        contactEmail || user.email,
+        kind,
+        location,
+        description,
+        photoKey,
+        photoType,
+        "received",
+        now,
+        now,
+      );
+    await db
+      .prepare(
+        `INSERT INTO report_events (id,report_id,status,note_en,note_zh,note_ms,created_at) VALUES (?,?,?,?,?,?,?)`,
+      )
+      .run(
+        crypto.randomUUID(),
+        id,
+        "received",
+        "Report received and awaiting review.",
+        "报告已收到，等待项目组审核。",
+        "Laporan diterima dan menunggu semakan pasukan projek.",
+        now,
+      );
+  });
   return Response.json({ reference, accessCode, status: "received" }, { status: 201 });
 }
 export async function GET() {
   const user = await getLocalUser();
   if (!user) return jsonError("Sign in is required", 401);
-  const rows = getDb()
+  const rows = await getDb()
     .prepare(
       `SELECT reference,kind,location,status,created_at AS createdAt FROM reports WHERE owner_user_id=? ORDER BY created_at DESC LIMIT 100`,
     )

@@ -11,11 +11,11 @@ export default async function FullMapPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   if (!/^[a-f0-9-]{36}$/.test(id)) notFound();
   if (!(await getLocalUser())) redirect(`/login?next=${encodeURIComponent(`/updates/${id}/map`)}`);
-  const notice = getDb()
+  const notice = (await getDb()
     .prepare(
       "SELECT id, kind, title_en AS titleEn, location, route_path AS routePath, point_data AS pointData FROM notices WHERE id=? AND status='published'",
     )
-    .get(id) as
+    .get(id)) as
     | {
         id: string;
         kind: string;

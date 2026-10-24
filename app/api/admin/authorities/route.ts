@@ -1,4 +1,4 @@
-import { getDb } from "@/db";
+﻿import { getDb } from "@/db";
 import { hashPassword, teamUser } from "@/lib/auth";
 import { isEmail, jsonError, readJsonObject, sameOrigin, trim } from "@/lib/server";
 
@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function GET() {
   if (!(await teamUser())) return jsonError("Forbidden", 403);
-  const accounts = getDb()
+  const accounts = await getDb()
     .prepare(
       "SELECT id,email,name,department,created_at AS createdAt FROM users WHERE role='team' AND staff_kind='authority' ORDER BY created_at DESC",
     )
@@ -34,9 +34,9 @@ export async function POST(request: Request) {
       "Name, valid email, department and a password of at least 12 characters are required",
     );
   const db = getDb();
-  if (db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
+  if (await db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
     return jsonError("An account with this email already exists", 409);
-  db.prepare(
+  await db.prepare(
     "INSERT INTO users (id,email,name,password_hash,role,staff_kind,department,created_at) VALUES (?,?,?,?,?,?,?,?)",
   ).run(
     crypto.randomUUID(),
