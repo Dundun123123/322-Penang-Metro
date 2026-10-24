@@ -36,17 +36,19 @@ export async function POST(request: Request) {
   const db = getDb();
   if (await db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
     return jsonError("An account with this email already exists", 409);
-  await db.prepare(
-    "INSERT INTO users (id,email,name,password_hash,role,staff_kind,department,created_at) VALUES (?,?,?,?,?,?,?,?)",
-  ).run(
-    crypto.randomUUID(),
-    email,
-    name,
-    hashPassword(password),
-    "team",
-    "authority",
-    department,
-    new Date().toISOString(),
-  );
+  await db
+    .prepare(
+      "INSERT INTO users (id,email,name,password_hash,role,staff_kind,department,created_at) VALUES (?,?,?,?,?,?,?,?)",
+    )
+    .run(
+      crypto.randomUUID(),
+      email,
+      name,
+      hashPassword(password),
+      "team",
+      "authority",
+      department,
+      new Date().toISOString(),
+    );
   return Response.json({ ok: true }, { status: 201 });
 }
