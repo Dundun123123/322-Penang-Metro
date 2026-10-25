@@ -416,7 +416,7 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
                 <span className="gate-symbol">M</span>
                 <h3>{t("reportSignInTitle")}</h3>
                 <p>{t("reportSignInBody")}</p>
-                <a className="button button-primary" href="/login?next=%2F%23report">
+                <a className="button button-primary" href="/login?next=%2Fcommunity%23report">
                   {t("residentSignIn")}
                 </a>
               </div>
@@ -591,7 +591,7 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
           ) : (
             <div className="alerts-gate">
               <p>{t("alertsSignInBody")}</p>
-              <a className="button button-primary" href="/login?next=%2F%23alerts">
+              <a className="button button-primary" href="/login?next=%2Fcommunity%23alerts">
                 {t("residentSignIn")}
               </a>
             </div>

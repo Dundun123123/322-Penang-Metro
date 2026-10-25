@@ -1001,7 +1001,7 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
   return (
     <div className="admin-page">
       <header className="admin-top">
-        <Link href="/">← {a.back}</Link>
+        <Link href="/community">← {a.back}</Link>
         <div className="header-end">
           <label className="language">
             <span className="sr-only">Language</span>

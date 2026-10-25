@@ -96,7 +96,7 @@ export default function NoticeDetail({ notice }: { notice: Notice }) {
         </label>
       </header>
       <main className="detail-main">
-        <Link className="detail-back" href="/#updates">
+        <Link className="detail-back" href="/community#updates">
           ← {t("navNotices")}
         </Link>
         <div className="detail-paper">

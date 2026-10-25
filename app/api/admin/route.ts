@@ -8,6 +8,6 @@ export async function GET() {
     isAdmin: user?.role === "team" || user?.role === "authority",
     role: user?.role,
     department: user?.department,
-    needsSetup: !teamExists(),
+    needsSetup: !(await teamExists()),
   });
 }
