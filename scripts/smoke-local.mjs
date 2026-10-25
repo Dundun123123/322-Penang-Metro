@@ -48,7 +48,7 @@ async function checkImage(host, route, cookie) {
 }
 try {
   // Require a fresh isolated database; both website processes must use these test credentials.
-  const [existing] = await db.query("SELECT COUNT(*) AS count FROM users WHERE role='team'");
+  const [existing] = await db.query("SELECT COUNT(*) AS count FROM app_user WHERE role='team'");
   assert.equal(Number(existing[0].count), 0, "Use a fresh test database with no team accounts");
   const team = await request(base, "/api/auth", {
     method: "POST",
@@ -60,13 +60,13 @@ try {
       setupKey: process.env.LOCAL_SETUP_KEY,
     },
   });
-  const [teamRows] = await db.query("SELECT id FROM users WHERE email=?", [teamEmail]);
+  const [teamRows] = await db.query("SELECT id FROM app_user WHERE email=?", [teamEmail]);
   assert.equal(teamRows.length, 1, "First website must point to this test database");
   const resident = await request(second, "/api/auth", {
     method: "POST",
     json: { action: "register", name: "共享测试居民", email: residentEmail, password },
   });
-  const [resRows] = await db.query("SELECT id FROM users WHERE email=?", [residentEmail]);
+  const [resRows] = await db.query("SELECT id FROM app_user WHERE email=?", [residentEmail]);
   assert.equal(resRows.length, 1, "Second website must point to this test database");
   const login = await request(base, "/api/auth", {
     method: "POST",
@@ -213,23 +213,23 @@ try {
 } finally {
   // Delete only this run's UUID-labelled records.
   const [reports] = await db.query(
-    "SELECT id,photo_key FROM reports WHERE owner_user_id IN (SELECT id FROM users WHERE email=?)",
+    "SELECT id,photo_key FROM report WHERE owner_user_id IN (SELECT id FROM app_user WHERE email=?)",
     [residentEmail],
   );
   for (const row of reports) {
-    await db.query("DELETE FROM reports WHERE id=?", [row.id]);
+    await db.query("DELETE FROM report WHERE id=?", [row.id]);
     if (row.photo_key)
-      await db.query("DELETE FROM uploaded_files WHERE storage_key=?", [row.photo_key]);
+      await db.query("DELETE FROM uploaded_file WHERE storage_key=?", [row.photo_key]);
   }
   if (noticeId) {
-    const [images] = await db.query("SELECT storage_key FROM notice_images WHERE notice_id=?", [
+    const [images] = await db.query("SELECT storage_key FROM notice_image WHERE notice_id=?", [
       noticeId,
     ]);
-    await db.query("DELETE FROM notices WHERE id=?", [noticeId]);
+    await db.query("DELETE FROM notice WHERE id=?", [noticeId]);
     for (const image of images)
-      await db.query("DELETE FROM uploaded_files WHERE storage_key=?", [image.storage_key]);
+      await db.query("DELETE FROM uploaded_file WHERE storage_key=?", [image.storage_key]);
   }
-  await db.query("DELETE FROM users WHERE email IN (?,?,?)", [
+  await db.query("DELETE FROM app_user WHERE email IN (?,?,?)", [
     residentEmail,
     teamEmail,
     authorityEmail,

@@ -18,18 +18,18 @@ try {
   );
   console.log(identity[0]);
   const required = {
-    users: [
+    app_user: [
       "id",
       "email",
       "name",
       "password_hash",
       "role",
-      "created_at",
+      "gmt_create",
       "staff_kind",
       "department",
     ],
-    sessions: ["id", "user_id", "expires_at", "created_at"],
-    notices: [
+    auth_session: ["id", "user_id", "expires_at", "gmt_create"],
+    notice: [
       "id",
       "kind",
       "status",
@@ -49,10 +49,10 @@ try {
       "progress_percent",
       "point_data",
       "client_request_id",
-      "created_at",
-      "updated_at",
+      "gmt_create",
+      "gmt_modified",
     ],
-    reports: [
+    report: [
       "id",
       "reference",
       "access_hash",
@@ -64,10 +64,10 @@ try {
       "photo_key",
       "photo_type",
       "status",
-      "created_at",
-      "updated_at",
+      "gmt_create",
+      "gmt_modified",
     ],
-    report_events: [
+    report_event: [
       "id",
       "report_id",
       "status",
@@ -77,11 +77,11 @@ try {
       "actor_name",
       "actor_role",
       "notice_id",
-      "created_at",
+      "gmt_create",
     ],
-    notice_images: ["id", "notice_id", "storage_key", "mime_type", "created_at"],
-    subscriptions: ["user_id", "categories", "updated_at"],
-    uploaded_files: ["storage_key", "mime_type", "content", "created_at"],
+    notice_image: ["id", "notice_id", "storage_key", "mime_type", "gmt_create"],
+    notice_subscription: ["user_id", "categories", "gmt_modified"],
+    uploaded_file: ["storage_key", "mime_type", "content", "gmt_create"],
   };
   for (const [table, columns] of Object.entries(required)) {
     const [actual] = await db.query(

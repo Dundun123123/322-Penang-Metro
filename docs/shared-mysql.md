@@ -4,7 +4,7 @@
 
 ## 1. 数据库主机操作一次
 
-原有七张表及上一轮新增字段需已创建：users、sessions、notices、reports、report_events、subscriptions、notice_images。使用 root 在 DBeaver 执行 `db/mysql/001-shared-uploads.sql`，添加第八张 `uploaded_files` 并放宽两个原字段长度。已有数据库账号对 `penang_metro.*` 的 SELECT/INSERT/UPDATE/DELETE 授权覆盖新表，无需授予建表权限。网站启动不会自动建表或修改结构。
+原有七张表及上一轮新增字段需已创建：app_user、auth_session、notice、report、report_event、notice_subscription、notice_image。使用 root 在 DBeaver 执行 `db/mysql/001-shared-uploads.sql`，添加第八张 `uploaded_file` 并放宽两个原字段长度。已有数据库账号对 `penang_metro.*` 的 SELECT/INSERT/UPDATE/DELETE 授权覆盖新表，无需授予建表权限。网站启动不会自动建表或修改结构。
 
 新安装的空数据库可使用 `db/mysql/schema.sql` 创建完整结构。该脚本的 CREATE IF NOT EXISTS 不负责修复旧表缺失的字段。
 
@@ -51,7 +51,7 @@ npm run dev
 
 ## 4. 三人验证
 
-1. CYY 在自己的网页注册一个居民账号；你在 DBeaver 的 users 表应能看到该账号。
+1. CYY 在自己的网页注册一个居民账号；你在 DBeaver 的 app_user 表应能看到该账号。
 2. JYY 在自己的网页使用同一居民账号登录，确认账号共享。
 3. CYY 提交一份带图片的报告；你用施工团队账号在自己网页查看报告和图片，并更新处理状态。
 4. CYY 刷新报告进度，应看到更新；订阅设置也会随账号跨电脑共享。
@@ -66,7 +66,7 @@ npm run dev
 - `ECONNREFUSED` / 超时：确认主机 MySQL、Tailscale、3306 防火墙规则和目标 IP。
 - `Access denied`：检查每人的 DB_USER/DB_PASSWORD，以及 MySQL 账号来源 IP 是否对应其 Tailscale 地址。
 - 缺表或缺字段：使用 root 完成此前的结构升级和本次图片表脚本。
-- 备份整个 MySQL 数据库，包括 uploaded_files。小组开发将图片集中在数据库中，避免另开文件服务。
+- 备份整个 MySQL 数据库，包括 uploaded_file。小组开发将图片集中在数据库中，避免另开文件服务。
 
 ## 开发验证（仅限独立测试数据库）
 
