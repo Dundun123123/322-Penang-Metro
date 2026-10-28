@@ -9,6 +9,26 @@ import mysql, {
 type SqlValue = string | number | boolean | null | Buffer;
 type Executor = Pool | PoolConnection;
 
+const sharedSchemaIdentifiers: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\breport_events\b/g, "report_event"],
+  [/\bnotice_images\b/g, "notice_image"],
+  [/\buploaded_files\b/g, "uploaded_file"],
+  [/\bsubscriptions\b/g, "notice_subscription"],
+  [/\bsessions\b/g, "auth_session"],
+  [/\busers\b/g, "app_user"],
+  [/\bnotices\b/g, "notice"],
+  [/\breports\b/g, "report"],
+  [/\bcreated_at\b/g, "gmt_create"],
+  [/\bupdated_at\b/g, "gmt_modified"],
+];
+
+function sharedSchemaSql(sql: string) {
+  return sharedSchemaIdentifiers.reduce(
+    (statement, [identifier, replacement]) => statement.replace(identifier, replacement),
+    sql,
+  );
+}
+
 export interface AppDatabase {
   prepare(sql: string): {
     all(...values: SqlValue[]): Promise<Record<string, unknown>[]>;
@@ -25,15 +45,15 @@ export function database(executor: Executor): AppDatabase {
     prepare(sql: string) {
       return {
         async all(...values: SqlValue[]): Promise<Record<string, unknown>[]> {
-          const [rows] = await executor.query<RowDataPacket[]>(sql, values);
+          const [rows] = await executor.query<RowDataPacket[]>(sharedSchemaSql(sql), values);
           return rows;
         },
         async get(...values: SqlValue[]): Promise<Record<string, unknown> | undefined> {
-          const [rows] = await executor.query<RowDataPacket[]>(sql, values);
+          const [rows] = await executor.query<RowDataPacket[]>(sharedSchemaSql(sql), values);
           return rows[0];
         },
         async run(...values: SqlValue[]) {
-          const [result] = await executor.query<ResultSetHeader>(sql, values);
+          const [result] = await executor.query<ResultSetHeader>(sharedSchemaSql(sql), values);
           return result;
         },
       };

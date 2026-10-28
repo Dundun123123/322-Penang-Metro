@@ -25,7 +25,7 @@ const copy = {
     setupKey: "Local setup key",
     continue: "Continue",
     logout: "Sign out",
-    back: "Back to community homepage",
+    back: "Back to project overview",
     steps: ["Browse public summaries", "Sign in for full details", "Report and follow issues"],
     teamSteps: ["Verify information", "Publish a notice", "Respond to reports"],
     authority: "Authority collaboration access",
@@ -57,7 +57,7 @@ const copy = {
     setupKey: "本地设置密钥",
     continue: "继续进入",
     logout: "退出登录",
-    back: "返回社区首页",
+    back: "返回项目首页",
     steps: ["浏览公开概览", "登录查看完整详情", "提交并追踪问题"],
     teamSteps: ["核实信息", "发布公告", "处理报告"],
     authority: "主管部门协作端",
@@ -87,7 +87,7 @@ const copy = {
     setupKey: "Kunci persediaan tempatan",
     continue: "Teruskan",
     logout: "Log keluar",
-    back: "Kembali ke laman komuniti",
+    back: "Kembali ke laman projek",
     steps: ["Lihat ringkasan umum", "Log masuk untuk butiran", "Lapor dan ikuti isu"],
     teamSteps: ["Sahkan maklumat", "Terbitkan makluman", "Jawab laporan"],
     authority: "Akses kerjasama pihak berkuasa",
@@ -104,18 +104,20 @@ export default function AuthEntry({
   signedIn,
   continueHref,
   teamSetupAvailable = false,
+  initialMode = "login",
 }: {
   audience: "community" | "team" | "authority";
   signedIn: boolean;
   continueHref: string;
   teamSetupAvailable?: boolean;
+  initialMode?: "login" | "register";
 }) {
   const { locale, setLocale } = useLocale();
   const c = copy[locale];
   const team = audience === "team";
   const authority = audience === "authority";
   const [mode, setMode] = useState<"login" | "register" | "setup">(
-    team && teamSetupAvailable ? "setup" : "login",
+    team && teamSetupAvailable ? "setup" : initialMode,
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
