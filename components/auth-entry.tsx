@@ -21,8 +21,10 @@ const copy = {
     register: "Create resident account",
     showRegister: "New resident? Create an account",
     showLogin: "Already registered? Sign in",
-    setup: "Create first team account",
-    setupKey: "Local setup key",
+    teamRegister: "Create construction team account",
+    teamShowRegister: "New team member? Create an account",
+    teamShowLogin: "Already have a team account? Sign in",
+    teamCode: "Today's team registration code",
     continue: "Continue",
     logout: "Sign out",
     back: "Back to project overview",
@@ -61,8 +63,10 @@ const copy = {
     register: "创建居民账号",
     showRegister: "第一次使用？创建居民账号",
     showLogin: "已有账号？返回登录",
-    setup: "创建首个团队账号",
-    setupKey: "本地设置密钥",
+    teamRegister: "创建施工团队账号",
+    teamShowRegister: "首次使用？创建团队账号",
+    teamShowLogin: "已有团队账号？返回登录",
+    teamCode: "今日团队注册码",
     continue: "继续进入",
     logout: "退出登录",
     back: "返回项目首页",
@@ -99,8 +103,10 @@ const copy = {
     register: "Cipta akaun komuniti",
     showRegister: "Pengguna baharu? Cipta akaun",
     showLogin: "Sudah berdaftar? Log masuk",
-    setup: "Cipta akaun pasukan pertama",
-    setupKey: "Kunci persediaan tempatan",
+    teamRegister: "Cipta akaun pasukan pembinaan",
+    teamShowRegister: "Ahli baharu? Cipta akaun",
+    teamShowLogin: "Sudah ada akaun? Log masuk",
+    teamCode: "Kod pendaftaran pasukan hari ini",
     continue: "Teruskan",
     logout: "Log keluar",
     back: "Kembali ke laman projek",
@@ -127,22 +133,18 @@ export default function AuthEntry({
   audience,
   signedIn,
   continueHref,
-  teamSetupAvailable = false,
   initialMode = "login",
 }: {
   audience: "community" | "team" | "authority";
   signedIn: boolean;
   continueHref: string;
-  teamSetupAvailable?: boolean;
   initialMode?: "login" | "register";
 }) {
   const { locale, setLocale } = useLocale();
   const c = copy[locale];
   const team = audience === "team";
   const authority = audience === "authority";
-  const [mode, setMode] = useState<"login" | "register" | "setup">(
-    team && teamSetupAvailable ? "setup" : initialMode,
-  );
+  const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -152,17 +154,17 @@ export default function AuthEntry({
     const form = new FormData(event.currentTarget);
     const body = {
       action:
-        mode === "setup"
-          ? "setup-team"
-          : mode === "register" && authority
-            ? "register-authority"
+        mode === "register" && authority
+          ? "register-authority"
+          : mode === "register" && team
+            ? "register-team"
             : mode,
       email: form.get("email"),
       password: form.get("password"),
       name: form.get("name"),
       department: form.get("department"),
       registrationKey: form.get("registrationKey"),
-      setupKey: form.get("setupKey"),
+      teamCode: form.get("teamCode"),
       role: audience === "community" ? "resident" : audience,
     };
     try {
@@ -224,10 +226,10 @@ export default function AuthEntry({
           <div className="auth-action-inner">
             <span className="auth-mini-mark">M</span>
             <h2>
-              {mode === "setup"
-                ? c.setup
-                : mode === "register" && authority
-                  ? c.authorityRegister
+              {mode === "register" && authority
+                ? c.authorityRegister
+                : mode === "register" && team
+                  ? c.teamRegister
                   : team
                     ? c.team
                     : authority
@@ -288,22 +290,28 @@ export default function AuthEntry({
                     />
                   </label>
                 )}
-                {mode === "setup" && (
+                {mode === "register" && team && (
                   <label>
-                    {c.setupKey}
-                    <input name="setupKey" type="password" required />
+                    {c.teamCode}
+                    <input
+                      name="teamCode"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      required
+                    />
                   </label>
                 )}
                 <button className="button button-primary" disabled={busy}>
                   {busy
                     ? c.working
-                    : mode === "setup"
-                      ? c.setup
-                      : mode === "register"
-                        ? authority
-                          ? c.authorityRegister
+                    : mode === "register"
+                      ? authority
+                        ? c.authorityRegister
+                        : team
+                          ? c.teamRegister
                           : c.register
-                        : c.login}
+                      : c.login}
                 </button>
                 {error && (
                   <p className="error" role="alert">
@@ -312,7 +320,7 @@ export default function AuthEntry({
                 )}
               </form>
             )}
-            {!team && !signedIn && (
+            {!signedIn && (
               <button
                 className="auth-secondary auth-button-link"
                 onClick={() => {
@@ -323,10 +331,14 @@ export default function AuthEntry({
                 {mode === "login"
                   ? authority
                     ? c.authorityShowRegister
-                    : c.showRegister
+                    : team
+                      ? c.teamShowRegister
+                      : c.showRegister
                   : authority
                     ? c.authorityShowLogin
-                    : c.showLogin}
+                    : team
+                      ? c.teamShowLogin
+                      : c.showLogin}
               </button>
             )}
             <Link className="auth-back" href="/">

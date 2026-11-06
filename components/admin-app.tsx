@@ -80,6 +80,10 @@ const portalWords = {
     password: "Temporary password (12+ characters)",
     accountHelp:
       "Team-created local accounts only. Share credentials privately; this does not verify official affiliation.",
+    teamCodeTitle: "Construction team registration code",
+    teamCodeHelp:
+      "Give this code to team members privately. It changes each day at midnight in Malaysia.",
+    teamCodeDate: "Valid on",
     image: "Notice photos (up to 4, JPEG/PNG/WebP, 5 MB each)",
     removeImage: "Remove image",
     relatedNotice: "Related published notice (after resolution)",
@@ -103,6 +107,9 @@ const portalWords = {
     local: "地方主管部门",
     password: "临时密码（至少 12 位）",
     accountHelp: "仅施工团队可创建本地协作账号。请私下交付密码；账号不代表官方身份已验证。",
+    teamCodeTitle: "施工团队注册码",
+    teamCodeHelp: "请私下提供给施工团队成员。注册码在马来西亚时间每天零点更新。",
+    teamCodeDate: "有效日期",
     image: "公告图片（最多 4 张，JPEG/PNG/WebP，每张不超过 5 MB）",
     removeImage: "移除图片",
     relatedNotice: "关联已发布公告（解决后）",
@@ -128,6 +135,10 @@ const portalWords = {
     password: "Kata laluan sementara (12+ aksara)",
     accountHelp:
       "Hanya pasukan boleh mencipta akaun tempatan. Kongsi kata laluan secara peribadi; akaun ini tidak mengesahkan status rasmi.",
+    teamCodeTitle: "Kod pendaftaran pasukan pembinaan",
+    teamCodeHelp:
+      "Kongsi kod ini secara peribadi. Kod berubah setiap hari pada tengah malam waktu Malaysia.",
+    teamCodeDate: "Sah pada",
     image: "Foto makluman (hingga 4, JPEG/PNG/WebP, 5 MB setiap satu)",
     removeImage: "Buang foto",
     relatedNotice: "Makluman terbitan berkaitan (selepas selesai)",
@@ -494,7 +505,7 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
   const p = portalWords[locale];
   const [auth, setAuth] = useState<AdminAccount | null>(null);
   const [setupKey, setSetupKey] = useState("");
-  const [tab, setTab] = useState<"notices" | "reports" | "accounts">(
+  const [tab, setTab] = useState<"notices" | "reports" | "accounts" | "teamCode">(
     role === "authority" ? "reports" : "notices",
   );
   const [notices, setNotices] = useState<NoticeForm[]>([]);
@@ -518,6 +529,8 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
   const uploadIds = useRef(new WeakMap<File, string>());
   const noticeRequestId = useRef<string | null>(null);
   const [authorityAccounts, setAuthorityAccounts] = useState<AuthorityAccount[]>([]);
+  const [teamCode, setTeamCode] = useState<{ date: string; code: string } | null>(null);
+  const [teamCodeError, setTeamCodeError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   function applyAdminData(data: Awaited<ReturnType<typeof fetchAdminData>>) {
@@ -533,6 +546,28 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
       setAuthorityAccounts(data.accounts);
     }
   }
+  useEffect(() => {
+    if (role !== "authority") return;
+    let active = true;
+    const refresh = () => {
+      api<{ date: string; code: string }>("/api/team-code")
+        .then((value) => {
+          if (active) {
+            setTeamCode(value);
+            setTeamCodeError("");
+          }
+        })
+        .catch((error) => {
+          if (active) setTeamCodeError(error instanceof Error ? error.message : String(error));
+        });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [role]);
   useEffect(() => {
     let active = true;
     fetchAdminData()
@@ -1075,6 +1110,15 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
                   {p.accounts} ({authorityAccounts.length})
                 </button>
               )}
+              {role === "authority" && (
+                <button
+                  type="button"
+                  className={tab === "teamCode" ? "active" : ""}
+                  onClick={() => setTab("teamCode")}
+                >
+                  {p.teamCodeTitle}
+                </button>
+              )}
             </div>
             {tab === "notices" ? (
               <div className="admin-grid">
@@ -1591,6 +1635,27 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
                   </section>
                 )}
               </div>
+            ) : tab === "teamCode" ? (
+              <section className="admin-surface team-code-panel">
+                <h2>{p.teamCodeTitle}</h2>
+                <p>{p.teamCodeHelp}</p>
+                {teamCodeError && (
+                  <p className="error" role="alert">
+                    {teamCodeError}
+                  </p>
+                )}
+                {teamCode ? (
+                  <>
+                    <strong className="team-code-value">{teamCode.code}</strong>
+                    <p>
+                      {p.teamCodeDate}: {teamCode.date}
+                    </p>
+                    <Link href="/team/register">/team/register</Link>
+                  </>
+                ) : !teamCodeError ? (
+                  <p>{a.loading}</p>
+                ) : null}
+              </section>
             ) : (
               <div className="admin-grid">
                 <section className="admin-surface">

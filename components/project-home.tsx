@@ -26,7 +26,7 @@ const content = {
     signIn: "Sign in",
     register: "Create account",
     staffAccount: "Create writer account",
-    teamAccount: "Team account setup",
+    teamAccount: "Create team account",
     note: "Student-built project. This site is not an official Penang LRT or government service.",
   },
   zh: {
@@ -48,7 +48,7 @@ const content = {
     signIn: "登录",
     register: "注册居民账号",
     staffAccount: "注册写作账号",
-    teamAccount: "设置团队账号",
+    teamAccount: "注册团队账号",
     note: "本网站为学生开发的项目，并非槟城轻快铁或政府官方服务。",
   },
   ms: {
@@ -78,7 +78,7 @@ const content = {
     signIn: "Log masuk",
     register: "Cipta akaun",
     staffAccount: "Cipta akaun penulis",
-    teamAccount: "Persediaan akaun pasukan",
+    teamAccount: "Cipta akaun pasukan",
     note: "Projek dibina oleh pelajar. Ini bukan perkhidmatan rasmi LRT Pulau Pinang atau kerajaan.",
   },
 };

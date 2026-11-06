@@ -29,10 +29,10 @@ DB_NAME=penang_metro
 DB_USER=metro_cyy
 DB_PASSWORD="填写自己账号的密码"
 LOCAL_SETUP_KEY=
-AUTHORITY_REGISTRATION_KEY=
+TEAM_CODE_SECRET=
 ```
 
-只有创建首个施工团队账号的电脑需要填写一个随机 `LOCAL_SETUP_KEY`。需要允许主管部门写作人员独立注册时，各网站实例应填写相同的 `AUTHORITY_REGISTRATION_KEY`，并把注册码私下提供给获授权人员；未设置时系统兼容使用 `LOCAL_SETUP_KEY`。共享库中已有团队账号后，其余电脑可直接通过 `/team/login` 登录同一个网站账号。MySQL 数据库账号与网页登录账号是两套账号。
+所有允许施工团队成员注册的网站实例需配置相同的随机 `TEAM_CODE_SECRET`；旧安装可暂时使用 `LOCAL_SETUP_KEY`。主管部门写作人员使用演示代码 `123456` 注册，登录后可查看每天更新的团队注册码并交给团队成员。已有团队账号可通过 `/team/login` 登录。MySQL 数据库账号与网页登录账号是两套账号。
 
 ## 3. 每人安装、检查、运行
 

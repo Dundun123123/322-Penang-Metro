@@ -760,6 +760,17 @@ footer {
   margin: 0 0 18px;
   font-size: 23px;
 }
+.team-code-panel {
+  max-width: 650px;
+}
+.team-code-value {
+  display: block;
+  margin: 22px 0 10px;
+  color: var(--deep);
+  font-size: clamp(42px, 6vw, 70px);
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}
 .admin-form label {
   display: block;
   font-size: 13px;

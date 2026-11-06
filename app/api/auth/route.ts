@@ -3,12 +3,11 @@ import {
   destroySession,
   getLocalUser,
   hashPassword,
-  teamExists,
   verifyPassword,
 } from "@/lib/auth";
 import { getDb } from "@/db";
 import { isEmail, jsonError, readJsonObject, sameOrigin, trim } from "@/lib/server";
-import { timingSafeEqual } from "node:crypto";
+import { currentTeamCode, validTeamCode } from "@/lib/team-code";
 
 export const runtime = "nodejs";
 
@@ -16,7 +15,6 @@ export async function GET() {
   const user = await getLocalUser();
   return Response.json({
     user: user ? { email: user.email, name: user.name, role: user.role } : null,
-    teamSetupAvailable: !(await teamExists()),
   });
 }
 
@@ -52,23 +50,14 @@ export async function POST(request: Request) {
     const name = trim(input.name, 120);
     const departmentCode = trim(input.department, 40);
     const registrationKey = trim(input.registrationKey, 200);
-    const expectedKey = process.env.AUTHORITY_REGISTRATION_KEY || process.env.LOCAL_SETUP_KEY;
+    const expectedKey = "123456";
     if (name.length < 2) return jsonError("Enter the authority writer name");
     if (!(["transport", "local"] as string[]).includes(departmentCode))
       return jsonError("Choose a valid authority organisation");
     if (password.length < 12)
       return jsonError("Authority account passwords must contain at least 12 characters");
-    if (!expectedKey)
-      return jsonError(
-        "Authority registration is not enabled. Configure AUTHORITY_REGISTRATION_KEY.",
-        503,
-      );
-    const suppliedKeyBuffer = Buffer.from(registrationKey);
-    const expectedKeyBuffer = Buffer.from(expectedKey);
-    const keyMatches =
-      suppliedKeyBuffer.length === expectedKeyBuffer.length &&
-      timingSafeEqual(suppliedKeyBuffer, expectedKeyBuffer);
-    if (!keyMatches) return jsonError("The authority registration code is incorrect", 403);
+    if (registrationKey !== expectedKey)
+      return jsonError("The authority registration code is incorrect", 403);
     const id = crypto.randomUUID();
     const error = await db.withLock("metro-authority-registration", async (lockedDb) => {
       if (await lockedDb.prepare("SELECT 1 FROM users WHERE email=?").get(email))
@@ -93,22 +82,14 @@ export async function POST(request: Request) {
     await createSession(id);
     return Response.json({ ok: true, role: "authority" }, { status: 201 });
   }
-  if (action === "setup-team") {
-    const setupKey = trim(input.setupKey, 200);
-    if (!process.env.LOCAL_SETUP_KEY || setupKey !== process.env.LOCAL_SETUP_KEY)
-      return jsonError("The local setup key is incorrect", 403);
+  if (action === "register-team") {
+    const teamCode = trim(input.teamCode, 6);
+    if (!currentTeamCode()) return jsonError("Team registration is not configured", 503);
+    if (!validTeamCode(teamCode)) return jsonError("The team registration code is incorrect", 403);
     const name = trim(input.name, 120);
     if (name.length < 2) return jsonError("Enter the team member name");
     const id = crypto.randomUUID();
-    const error = await db.withLock("metro-first-team", async (db) => {
-      if (
-        await db
-          .prepare(
-            "SELECT 1 FROM users WHERE role='team' AND COALESCE(staff_kind,'team')='team' LIMIT 1",
-          )
-          .get()
-      )
-        return "The first team account has already been created";
+    const error = await db.withLock("metro-team-registration", async (db) => {
       if (await db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
         return "An account with this email already exists";
       await db

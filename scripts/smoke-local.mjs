@@ -50,14 +50,47 @@ try {
   // Require a fresh isolated database; both website processes must use these test credentials.
   const [existing] = await db.query("SELECT COUNT(*) AS count FROM app_user WHERE role='team'");
   assert.equal(Number(existing[0].count), 0, "Use a fresh test database with no team accounts");
-  const team = await request(base, "/api/auth", {
+  const registeredAuthority = await request(base, "/api/auth", {
     method: "POST",
     json: {
-      action: "setup-team",
+      action: "register-authority",
+      name: "QA Authority",
+      email: authorityEmail,
+      password,
+      department: "transport",
+      registrationKey: "123456",
+    },
+  });
+  assert.equal(registeredAuthority.body.role, "authority");
+  const dailyCode = await request(base, "/api/team-code", {
+    cookie: registeredAuthority.cookie,
+  });
+  assert.match(dailyCode.body.code, /^\d{6}$/);
+  assert.equal((await fetch(second + "/api/team-code")).status, 403);
+  assert.equal(
+    (
+      await fetch(second + "/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: second },
+        body: JSON.stringify({
+          action: "register-team",
+          name: "QA Team",
+          email: teamEmail,
+          password,
+          teamCode: dailyCode.body.code === "000000" ? "000001" : "000000",
+        }),
+      })
+    ).status,
+    403,
+  );
+  const team = await request(second, "/api/auth", {
+    method: "POST",
+    json: {
+      action: "register-team",
       name: "QA Team",
       email: teamEmail,
       password,
-      setupKey: process.env.LOCAL_SETUP_KEY,
+      teamCode: dailyCode.body.code,
     },
   });
   const [teamRows] = await db.query("SELECT id FROM app_user WHERE email=?", [teamEmail]);
@@ -76,18 +109,6 @@ try {
     (await request(second, "/api/auth", { cookie: login.cookie })).body.user.name,
     "共享测试居民",
   );
-  const registeredAuthority = await request(base, "/api/auth", {
-    method: "POST",
-    json: {
-      action: "register-authority",
-      name: "QA Authority",
-      email: authorityEmail,
-      password,
-      department: "transport",
-      registrationKey: process.env.AUTHORITY_REGISTRATION_KEY || process.env.LOCAL_SETUP_KEY,
-    },
-  });
-  assert.equal(registeredAuthority.body.role, "authority");
   const [authorityRows] = await db.query(
     "SELECT role,staff_kind,department FROM app_user WHERE email=?",
     [authorityEmail],

@@ -32,7 +32,7 @@ jobs:
       DB_NAME: metro_shared_test
       DB_USER: metro_test
       DB_PASSWORD: isolated-ci-app
-      LOCAL_SETUP_KEY: isolated-ci-setup
+      TEAM_CODE_SECRET: isolated-ci-team-secret
       SMOKE_ALLOW_WRITES: "1"
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
