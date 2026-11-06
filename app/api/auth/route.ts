@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth";
 import { getDb } from "@/db";
 import { isEmail, jsonError, readJsonObject, sameOrigin, trim } from "@/lib/server";
+import { timingSafeEqual } from "node:crypto";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,51 @@ export async function POST(request: Request) {
       .run(id, email, name, hashPassword(password), "resident", new Date().toISOString());
     await createSession(id);
     return Response.json({ ok: true, role: "resident" }, { status: 201 });
+  }
+  if (action === "register-authority") {
+    const name = trim(input.name, 120);
+    const departmentCode = trim(input.department, 40);
+    const registrationKey = trim(input.registrationKey, 200);
+    const expectedKey = process.env.AUTHORITY_REGISTRATION_KEY || process.env.LOCAL_SETUP_KEY;
+    if (name.length < 2) return jsonError("Enter the authority writer name");
+    if (!(["transport", "local"] as string[]).includes(departmentCode))
+      return jsonError("Choose a valid authority organisation");
+    if (password.length < 12)
+      return jsonError("Authority account passwords must contain at least 12 characters");
+    if (!expectedKey)
+      return jsonError(
+        "Authority registration is not enabled. Configure AUTHORITY_REGISTRATION_KEY.",
+        503,
+      );
+    const suppliedKeyBuffer = Buffer.from(registrationKey);
+    const expectedKeyBuffer = Buffer.from(expectedKey);
+    const keyMatches =
+      suppliedKeyBuffer.length === expectedKeyBuffer.length &&
+      timingSafeEqual(suppliedKeyBuffer, expectedKeyBuffer);
+    if (!keyMatches) return jsonError("The authority registration code is incorrect", 403);
+    const id = crypto.randomUUID();
+    const error = await db.withLock("metro-authority-registration", async (lockedDb) => {
+      if (await lockedDb.prepare("SELECT 1 FROM users WHERE email=?").get(email))
+        return "An account with this email already exists";
+      await lockedDb
+        .prepare(
+          "INSERT INTO users (id,email,name,password_hash,role,staff_kind,department,created_at) VALUES (?,?,?,?,?,?,?,?)",
+        )
+        .run(
+          id,
+          email,
+          name,
+          hashPassword(password),
+          "team",
+          "authority",
+          departmentCode,
+          new Date().toISOString(),
+        );
+      return null;
+    });
+    if (error) return jsonError(error, 409);
+    await createSession(id);
+    return Response.json({ ok: true, role: "authority" }, { status: 201 });
   }
   if (action === "setup-team") {
     const setupKey = trim(input.setupKey, 200);

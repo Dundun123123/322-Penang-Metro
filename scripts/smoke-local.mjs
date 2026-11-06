@@ -76,11 +76,25 @@ try {
     (await request(second, "/api/auth", { cookie: login.cookie })).body.user.name,
     "共享测试居民",
   );
-  await request(base, "/api/admin/authorities", {
-    cookie: team.cookie,
+  const registeredAuthority = await request(base, "/api/auth", {
     method: "POST",
-    json: { name: "QA Authority", email: authorityEmail, password, department: "transport" },
+    json: {
+      action: "register-authority",
+      name: "QA Authority",
+      email: authorityEmail,
+      password,
+      department: "transport",
+      registrationKey: process.env.AUTHORITY_REGISTRATION_KEY || process.env.LOCAL_SETUP_KEY,
+    },
   });
+  assert.equal(registeredAuthority.body.role, "authority");
+  const [authorityRows] = await db.query(
+    "SELECT role,staff_kind,department FROM app_user WHERE email=?",
+    [authorityEmail],
+  );
+  assert.equal(authorityRows[0].role, "team");
+  assert.equal(authorityRows[0].staff_kind, "authority");
+  assert.equal(authorityRows[0].department, "transport");
   const authority = await request(second, "/api/auth", {
     method: "POST",
     json: { action: "login", role: "authority", email: authorityEmail, password },

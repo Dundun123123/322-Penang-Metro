@@ -1,5 +1,16 @@
-import StaffRegistration from "@/components/staff-registration";
+import AuthEntry from "@/components/auth-entry";
+import { getLocalUser } from "@/lib/auth";
 
-export default function AuthorityRegisterPage() {
-  return <StaffRegistration audience="authority" />;
+export const dynamic = "force-dynamic";
+
+export default async function AuthorityRegisterPage() {
+  const user = await getLocalUser();
+  return (
+    <AuthEntry
+      audience="authority"
+      signedIn={user?.role === "authority"}
+      continueHref="/authority"
+      initialMode="register"
+    />
+  );
 }

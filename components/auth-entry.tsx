@@ -31,7 +31,15 @@ const copy = {
     authority: "Authority collaboration access",
     authorityTitle: "Follow every issue through to a visible outcome.",
     authorityBody:
-      "Authorised transport and local-authority collaborators can post staged responses and publish notices. Accounts are created by the project team.",
+      "Authorised transport and local-authority writers use their own accounts to post staged responses and publish notices.",
+    authorityRegister: "Create authority writer account",
+    authorityShowRegister: "New authority writer? Create an account",
+    authorityShowLogin: "Already registered? Sign in",
+    authorityDepartment: "Authority organisation",
+    authorityDepartmentPlaceholder: "Choose your organisation",
+    transportationBureau: "Transportation Bureau",
+    localAuthority: "Government / Local Authorities",
+    authorityRegistrationKey: "Authority registration code",
     authoritySteps: [
       "Review resident feedback",
       "Record each response stage",
@@ -63,7 +71,15 @@ const copy = {
     authority: "主管部门协作端",
     authorityTitle: "让每个问题的处理过程清晰可见。",
     authorityBody:
-      "交通部门和地方主管部门的获授权协作人员可逐步回执居民反馈并发布公告。账号由施工团队创建。",
+      "交通局和政府／地方主管部门的获授权写作人员使用自己的账号逐步回执居民反馈并发布公告。",
+    authorityRegister: "创建主管部门写作账号",
+    authorityShowRegister: "首次使用？创建主管部门账号",
+    authorityShowLogin: "已有主管部门账号？返回登录",
+    authorityDepartment: "所属主管机构",
+    authorityDepartmentPlaceholder: "请选择所属机构",
+    transportationBureau: "交通局",
+    localAuthority: "政府／地方主管部门",
+    authorityRegistrationKey: "主管部门注册代码",
     authoritySteps: ["查看居民反馈", "逐阶段记录处理", "关联已发布公告"],
     working: "处理中…",
   },
@@ -93,7 +109,15 @@ const copy = {
     authority: "Akses kerjasama pihak berkuasa",
     authorityTitle: "Setiap isu diikuti sehingga ada hasil yang jelas.",
     authorityBody:
-      "Wakil pengangkutan dan pihak berkuasa tempatan yang diberi akses boleh memberi respons berperingkat dan menerbitkan makluman. Akaun dicipta oleh pasukan projek.",
+      "Penulis yang diberi kuasa daripada biro pengangkutan dan pihak berkuasa tempatan menggunakan akaun sendiri untuk memberi respons dan menerbitkan makluman.",
+    authorityRegister: "Cipta akaun penulis pihak berkuasa",
+    authorityShowRegister: "Penulis baharu? Cipta akaun",
+    authorityShowLogin: "Sudah berdaftar? Log masuk",
+    authorityDepartment: "Organisasi pihak berkuasa",
+    authorityDepartmentPlaceholder: "Pilih organisasi anda",
+    transportationBureau: "Biro Pengangkutan",
+    localAuthority: "Kerajaan / Pihak Berkuasa Tempatan",
+    authorityRegistrationKey: "Kod pendaftaran pihak berkuasa",
     authoritySteps: ["Semak maklum balas", "Catat perkembangan", "Pautkan makluman terbitan"],
     working: "Sila tunggu…",
   },
@@ -127,10 +151,17 @@ export default function AuthEntry({
     setError("");
     const form = new FormData(event.currentTarget);
     const body = {
-      action: mode === "setup" ? "setup-team" : mode,
+      action:
+        mode === "setup"
+          ? "setup-team"
+          : mode === "register" && authority
+            ? "register-authority"
+            : mode,
       email: form.get("email"),
       password: form.get("password"),
       name: form.get("name"),
+      department: form.get("department"),
+      registrationKey: form.get("registrationKey"),
       setupKey: form.get("setupKey"),
       role: audience === "community" ? "resident" : audience,
     };
@@ -193,7 +224,15 @@ export default function AuthEntry({
           <div className="auth-action-inner">
             <span className="auth-mini-mark">M</span>
             <h2>
-              {mode === "setup" ? c.setup : team ? c.team : authority ? c.authority : c.community}
+              {mode === "setup"
+                ? c.setup
+                : mode === "register" && authority
+                  ? c.authorityRegister
+                  : team
+                    ? c.team
+                    : authority
+                      ? c.authority
+                      : c.community}
             </h2>
             {signedIn ? (
               <>
@@ -212,6 +251,18 @@ export default function AuthEntry({
                     <input name="name" required minLength={2} />
                   </label>
                 )}
+                {mode === "register" && authority && (
+                  <label>
+                    {c.authorityDepartment}
+                    <select name="department" required defaultValue="">
+                      <option value="" disabled>
+                        {c.authorityDepartmentPlaceholder}
+                      </option>
+                      <option value="transport">{c.transportationBureau}</option>
+                      <option value="local">{c.localAuthority}</option>
+                    </select>
+                  </label>
+                )}
                 <label>
                   {c.email}
                   <input name="email" type="email" required autoComplete="email" />
@@ -222,10 +273,21 @@ export default function AuthEntry({
                     name="password"
                     type="password"
                     required
-                    minLength={8}
+                    minLength={mode === "register" && authority ? 12 : 8}
                     autoComplete={mode === "login" ? "current-password" : "new-password"}
                   />
                 </label>
+                {mode === "register" && authority && (
+                  <label>
+                    {c.authorityRegistrationKey}
+                    <input
+                      name="registrationKey"
+                      type="password"
+                      required
+                      autoComplete="one-time-code"
+                    />
+                  </label>
+                )}
                 {mode === "setup" && (
                   <label>
                     {c.setupKey}
@@ -238,7 +300,9 @@ export default function AuthEntry({
                     : mode === "setup"
                       ? c.setup
                       : mode === "register"
-                        ? c.register
+                        ? authority
+                          ? c.authorityRegister
+                          : c.register
                         : c.login}
                 </button>
                 {error && (
@@ -248,7 +312,7 @@ export default function AuthEntry({
                 )}
               </form>
             )}
-            {!team && !authority && !signedIn && (
+            {!team && !signedIn && (
               <button
                 className="auth-secondary auth-button-link"
                 onClick={() => {
@@ -256,7 +320,13 @@ export default function AuthEntry({
                   setMode(mode === "login" ? "register" : "login");
                 }}
               >
-                {mode === "login" ? c.showRegister : c.showLogin}
+                {mode === "login"
+                  ? authority
+                    ? c.authorityShowRegister
+                    : c.showRegister
+                  : authority
+                    ? c.authorityShowLogin
+                    : c.showLogin}
               </button>
             )}
             <Link className="auth-back" href="/">

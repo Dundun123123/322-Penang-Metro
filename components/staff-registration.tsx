@@ -8,7 +8,7 @@ const copy = {
   en: {
     title: "Account access is managed by the project team",
     authority:
-      "Authority collaboration accounts are created by an authorised construction team member. Ask your project contact to create your account and share the sign-in details privately. This local account does not verify an official government identity.",
+      "Authority writers now have a separate registration page and use an authority registration code supplied by the local deployment administrator.",
     team: "The first team account is created with the local setup key. After that, team access cannot be self-registered on this site. Ask the project administrator for access.",
     login: "Go to sign in",
     home: "Back to project overview",
@@ -16,8 +16,7 @@ const copy = {
   },
   zh: {
     title: "工作账号由项目团队管理",
-    authority:
-      "主管部门协作账号由已授权的施工团队成员创建。请联系项目对接人创建账号，并通过私下渠道获取登录信息。此本地账号不代表政府官方身份认证。",
+    authority: "主管部门写作人员现在使用独立注册页面，并填写本地部署管理员提供的主管部门注册代码。",
     team: "首个团队账号需要本地设置密钥创建。之后不能在网站上自行注册团队账号，请联系项目管理员获取权限。",
     login: "前往登录",
     home: "返回项目首页",
@@ -26,7 +25,7 @@ const copy = {
   ms: {
     title: "Akses akaun diuruskan oleh pasukan projek",
     authority:
-      "Akaun kerjasama pihak berkuasa dicipta oleh ahli pasukan pembinaan yang diberi kuasa. Hubungi wakil projek untuk mendapatkan akaun dan maklumat log masuk secara peribadi. Akaun tempatan ini bukan pengesahan identiti rasmi kerajaan.",
+      "Penulis pihak berkuasa kini menggunakan halaman pendaftaran berasingan dengan kod yang diberikan oleh pentadbir pelaksanaan tempatan.",
     team: "Akaun pasukan pertama dicipta menggunakan kunci persediaan tempatan. Selepas itu, pendaftaran sendiri tidak tersedia. Hubungi pentadbir projek untuk akses.",
     login: "Pergi ke log masuk",
     home: "Kembali ke laman projek",

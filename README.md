@@ -49,7 +49,7 @@ $randomGenerator.Dispose()
 [System.BitConverter]::ToString($secretBytes).Replace('-', '')
 ```
 
-把输出的字符串填在 `.env.local` 的 `LOCAL_SETUP_KEY=` 后面，保存。`.env.example` 只列出变量名，不包含可直接使用的密钥；`.env.local` 是每台电脑自己的秘密文件，不要上传。还必须填写 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`。先运行 `npm run db:check`。数据库服务器只需在一台电脑运行；不会自动建表或插入示例公告。
+把输出的字符串填在 `.env.local` 的 `LOCAL_SETUP_KEY=` 后面；再生成一个不同的字符串填入 `AUTHORITY_REGISTRATION_KEY=`，用于主管部门写作人员注册。共享数据库的所有网站实例应配置相同的主管注册码，并只通过私下渠道提供给获授权人员。`.env.example` 只列出变量名，不包含可直接使用的密钥；`.env.local` 是每台电脑自己的秘密文件，不要上传。还必须填写 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`。先运行 `npm run db:check`。数据库服务器只需在一台电脑运行；不会自动建表或插入示例公告。
 
 构建并启动正式本地服务：
 
@@ -86,7 +86,7 @@ npm run dev
 
 ### 主管部门协作账号
 
-施工团队登录 `/team`，打开“主管部门账号”，填写姓名、邮箱、部门和至少 12 位临时密码。创建后把登录地址 `/authority/login` 和密码通过私下渠道交给协作人员。主管部门账号不能自行注册，也不能通过施工团队入口登录；施工团队账号不能通过主管部门入口登录。此账号只是本地项目权限，不构成官方机构身份核验。密码目前没有邮件重置流程。
+主管部门写作人员打开 `/authority/register`，选择交通局或政府／地方主管部门，填写姓名、邮箱、至少 12 位密码以及 `.env.local` 配置的 `AUTHORITY_REGISTRATION_KEY`。如果该变量为空，系统会兼容使用 `LOCAL_SETUP_KEY`。注册成功后直接进入主管部门工作台，不需要施工团队预先创建账号。主管部门账号不能通过施工团队入口登录，施工团队账号也不能通过主管部门入口登录。注册代码只应私下提供给获授权人员；此账号只是本地项目权限，不构成官方机构身份核验。密码目前没有邮件重置流程。
 
 ### 反馈回执和公告图片
 

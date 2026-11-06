@@ -124,7 +124,7 @@ function showRoutes(
         radius: first || last ? 8 : 4,
         color: "#ffffff",
         weight: first || last ? 3 : 1,
-        fillColor: first ? "#087f83" : last ? "#c74b24" : "#ffd56a",
+        fillColor: first ? "#2878a5" : last ? "#c74b24" : "#ffd56a",
         fillOpacity: active ? 1 : 0.78,
       })
         .addTo(group)
@@ -145,7 +145,7 @@ function showRoutes(
           radius: 13,
           color: "#fff",
           weight: 3,
-          fillColor: side === "original" ? "#123b52" : "#b57013",
+          fillColor: side === "original" ? "#173b5e" : "#b57013",
           fillOpacity: 1,
           bubblingMouseEvents: false,
         })
@@ -169,7 +169,7 @@ function showRoutes(
     const point = points[key];
     if (!hasCoordinates(point)) return;
     const original = key === "original";
-    const color = markerMode === "safety" ? "#b5472b" : original ? "#a8392c" : "#087f83";
+    const color = markerMode === "safety" ? "#b5472b" : original ? "#a8392c" : "#2878a5";
     const tooltip = document.createElement("span");
     const markerLabel =
       key === "hazard"
