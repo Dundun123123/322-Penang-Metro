@@ -4,12 +4,13 @@
 
 ## 1. 数据库准备
 
-当前代码使用 9 张表：`app_user`、`auth_session`、`notice`、`report`、`report_event`、`notice_subscription`、`notice_image`、`uploaded_file`、`auth_rate_limit`。创建和修改时间字段分别为 `gmt_create`、`gmt_modified`，认证限流计数字段为 `attempt_count`。
+当前代码使用 10 张表：`app_user`、`auth_session`、`notice`、`report`、`report_event`、`notice_subscription`、`notice_image`、`uploaded_file`、`auth_rate_limit`、`registration_config`。创建和修改时间字段分别为 `gmt_create`、`gmt_modified`，认证限流计数字段为 `attempt_count`。
 
 - 已完成名称迁移的共享数据库：无需再次执行重命名或旧建表脚本。三台电脑都更新到当前代码，在各自项目目录运行 `npm run db:check` 后重启网站。旧版代码不能与改名后的数据库混用。
 - 新安装的空数据库：由数据库管理员执行 `db/mysql/schema.sql` 创建当前完整结构。该脚本使用 CREATE IF NOT EXISTS，不会迁移旧表或修补已有表。
 - 仍使用旧复数表名的数据库：先由管理员完成约定的表名、时间字段及认证计数字段迁移，再运行当前代码。历史版本的复数表名迁移脚本不会把旧表改成当前结构，请勿直接套用。
 - 已使用单数表名但缺少 `auth_rate_limit`：先选择项目数据库，再由管理员执行当前版本的 `db/mysql/002-auth-rate-limits.sql`。它只补建认证限流表，不修改已有业务数据；已有该表时可重复执行。
+- 缺少 `registration_config`：管理员在项目数据库执行 `db/mysql/003-shared-registration.sql`，然后在保留原注册码的电脑执行一次 `npm run registration:setup`。脚本将 `AUTHORITY_REGISTRATION_KEY` 保存为校验哈希，并导入 `TEAM_CODE_SECRET`（或旧 `LOCAL_SETUP_KEY`）；没有团队密钥时自动生成。重复运行保留已存在的配置，不覆盖原注册码。新建空库使用完整 schema 后也需要执行这一步初始化。
 
 已有数据库账号对 `penang_metro.*` 的 SELECT/INSERT/UPDATE/DELETE 授权覆盖这些表，无需授予建表权限；若原先按单表授权，由管理员将授权同步至新表名。网站启动不会自动建表或修改结构。
 
@@ -33,12 +34,9 @@ DB_PORT=3306
 DB_NAME=penang_metro
 DB_USER=metro_cyy
 DB_PASSWORD="填写自己账号的密码"
-LOCAL_SETUP_KEY=
-TEAM_CODE_SECRET=
-AUTHORITY_REGISTRATION_KEY=
 ```
 
-所有允许施工团队成员注册的网站实例需配置相同的随机 `TEAM_CODE_SECRET`；旧安装可暂时使用 `LOCAL_SETUP_KEY`。主管部门注册使用独立的随机 `AUTHORITY_REGISTRATION_KEY`（至少 12 位），只私下发给获授权写作人员；未配置时该注册入口拒绝开户，已有账号仍可登录。主管部门登录后可查看每天更新的团队注册码并交给团队成员。已有团队账号可通过 `/team/login` 登录。MySQL 数据库账号与网页登录账号是两套账号。
+同学的电脑只需配置以上数据库连接信息，无需填写注册密钥。网站从同一数据库读取共享注册码配置；主管部门注册码只私下交给获授权写作人员，连接同一数据库的所有网站均可校验。主管部门登录后可查看每天更新的团队注册码并交给团队成员。共享配置尚未初始化时，员工注册返回未配置，已有账号仍可登录。已有团队账号可通过 `/team/login` 登录。MySQL 数据库账号与网页登录账号是两套账号。
 
 ## 3. 每人安装、检查、运行
 

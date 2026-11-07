@@ -2,6 +2,15 @@
 CREATE DATABASE IF NOT EXISTS penang_metro CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE penang_metro;
 
+CREATE TABLE IF NOT EXISTS registration_config (
+  id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+  authority_key_hash VARCHAR(255) NOT NULL,
+  team_code_secret VARCHAR(255) NOT NULL,
+  gmt_create VARCHAR(30) NOT NULL,
+  gmt_modified VARCHAR(30) NOT NULL,
+  CONSTRAINT registration_config_singleton CHECK (id = 1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS auth_rate_limit (
   bucket_key CHAR(64) NOT NULL PRIMARY KEY,
   attempt_count INT UNSIGNED NOT NULL DEFAULT 0,

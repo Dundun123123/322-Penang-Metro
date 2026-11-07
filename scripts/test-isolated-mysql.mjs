@@ -368,14 +368,34 @@ try {
     DB_NAME: database,
     DB_USER: "metro_test",
     DB_PASSWORD: appPassword,
-    LOCAL_SETUP_KEY: randomBytes(24).toString("hex"),
-    TEAM_CODE_SECRET: randomBytes(24).toString("hex"),
-    AUTHORITY_REGISTRATION_KEY: randomBytes(24).toString("hex"),
     SMOKE_ALLOW_WRITES: "1",
     SMOKE_BASE_URL: "http://127.0.0.1:" + firstPort,
     SMOKE_SECOND_BASE_URL: "http://127.0.0.1:" + secondPort,
   };
   const nodeArgs = ["--require", preload];
+  const authorityKey = randomBytes(24).toString("hex");
+  await runChild(
+    "registration-setup",
+    process.execPath,
+    [...nodeArgs, path.join(repo, "scripts", "setup-registration.mjs")],
+    {
+      ...env,
+      AUTHORITY_REGISTRATION_KEY: authorityKey,
+      TEAM_CODE_SECRET: randomBytes(32).toString("hex"),
+    },
+    30_000,
+  );
+  await runChild(
+    "registration-setup-idempotent",
+    process.execPath,
+    [...nodeArgs, path.join(repo, "scripts", "setup-registration.mjs")],
+    {
+      ...env,
+      AUTHORITY_REGISTRATION_KEY: "ignored-site-local-key",
+      TEAM_CODE_SECRET: "ignored-site-local-seed",
+    },
+    30_000,
+  );
   await runChild(
     "db-check",
     process.execPath,
@@ -393,7 +413,11 @@ try {
     "website-2",
     process.execPath,
     [...nodeArgs, nextCli, "start", repo, "--hostname", "127.0.0.1", "--port", String(secondPort)],
-    env,
+    {
+      ...env,
+      AUTHORITY_REGISTRATION_KEY: "ignored-site-local-key",
+      TEAM_CODE_SECRET: "ignored-site-local-seed",
+    },
   );
   await Promise.all([
     waitForWebsite(first, env.SMOKE_BASE_URL),
@@ -406,7 +430,7 @@ try {
     "smoke",
     process.execPath,
     [...nodeArgs, path.join(repo, "scripts", "smoke-local.mjs")],
-    env,
+    { ...env, SMOKE_AUTHORITY_REGISTRATION_KEY: authorityKey },
   );
   console.log("Isolated MySQL integration smoke test passed.");
 } catch (error) {

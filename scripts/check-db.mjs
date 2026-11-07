@@ -18,6 +18,13 @@ try {
   );
   console.log(identity[0]);
   const required = {
+    registration_config: [
+      "id",
+      "authority_key_hash",
+      "team_code_secret",
+      "gmt_create",
+      "gmt_modified",
+    ],
     auth_rate_limit: ["bucket_key", "attempt_count", "expires_at"],
     app_user: [
       "id",
@@ -97,7 +104,14 @@ try {
     throw new Error(
       "Set max_allowed_packet to at least 16 MB on the MySQL server for 5 MB image uploads.",
     );
-  console.log("Connection and required columns OK. No data was changed.");
+  const [configuration] = await db.query("SELECT id FROM registration_config WHERE id=1");
+  if (!configuration.length)
+    throw new Error(
+      "Shared registration is not initialized. Run npm run registration:setup once on the setup computer.",
+    );
+  console.log(
+    "Connection, required columns and shared registration configuration OK. No data was changed.",
+  );
 } finally {
   await db.end();
 }

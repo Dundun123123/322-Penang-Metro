@@ -1,5 +1,5 @@
 import { consumeAuthAttempt } from "@/lib/auth-rate-limit";
-import { timingSafeEqual } from "node:crypto";
+import { getRegistrationConfig } from "@/lib/registration-config";
 import { PasswordBusyError } from "@/lib/password";
 import {
   createSession,
@@ -91,17 +91,14 @@ async function authenticate(request: Request) {
     const name = trim(input.name, 120);
     const departmentCode = trim(input.department, 40);
     const registrationKey = trim(input.registrationKey, 200);
-    const expectedKey = process.env.AUTHORITY_REGISTRATION_KEY;
-    if (!expectedKey || expectedKey.length < 12)
-      return jsonError("Authority registration is not configured", 503);
+    const configuration = await getRegistrationConfig();
+    if (!configuration) return jsonError("Authority registration is not configured", 503);
     if (name.length < 2) return jsonError("Enter the authority writer name");
     if (!(["transport", "local"] as string[]).includes(departmentCode))
       return jsonError("Choose a valid authority organisation");
     if (password.length < 12)
       return jsonError("Authority account passwords must contain at least 12 characters");
-    const provided = Buffer.from(registrationKey);
-    const expected = Buffer.from(expectedKey);
-    if (provided.length !== expected.length || !timingSafeEqual(provided, expected))
+    if (!(await verifyPassword(registrationKey, configuration.authorityKeyHash)))
       return jsonError("The authority registration code is incorrect", 403);
     const id = crypto.randomUUID();
     const error = await db.withLock("metro-authority-registration", async (lockedDb) => {
@@ -129,8 +126,10 @@ async function authenticate(request: Request) {
   }
   if (action === "register-team") {
     const teamCode = trim(input.teamCode, 200);
-    if (!currentTeamCode()) return jsonError("Team registration is not configured", 503);
-    if (!validTeamCode(teamCode)) return jsonError("The team registration code is incorrect", 403);
+    const currentCode = await currentTeamCode();
+    if (!currentCode) return jsonError("Team registration is not configured", 503);
+    if (!validTeamCode(teamCode, currentCode))
+      return jsonError("The team registration code is incorrect", 403);
     const name = trim(input.name, 120);
     if (name.length < 2) return jsonError("Enter the team member name");
     const id = crypto.randomUUID();

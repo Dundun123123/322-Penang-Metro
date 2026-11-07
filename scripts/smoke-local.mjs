@@ -24,6 +24,7 @@ const residentEmail = `resident-${stamp}@local.test`,
   teamEmail = `team-${stamp}@local.test`,
   authorityEmail = `authority-${stamp}@local.test`;
 const password = "SharedTest!2026";
+const authorityRegistrationKey = process.env.SMOKE_AUTHORITY_REGISTRATION_KEY;
 let noticeId = "",
   reportReference = "",
   uploadId = "";
@@ -61,7 +62,7 @@ async function checkStaffRegistration(host) {
   assert.ok((await teamPage.text()).includes('name="teamCode"'));
   const authorityHtml = await authorityPage.text();
   assert.ok(authorityHtml.includes('name="registrationKey"'));
-  assert.ok(!authorityHtml.includes(process.env.AUTHORITY_REGISTRATION_KEY));
+  assert.ok(!authorityHtml.includes(authorityRegistrationKey));
 }
 async function rejectAuth(host, json, status) {
   const response = await fetch(host + "/api/auth", {
@@ -75,7 +76,41 @@ try {
   // Require a fresh isolated database; both website processes must use these test credentials.
   const [existing] = await db.query("SELECT COUNT(*) AS count FROM app_user WHERE role='team'");
   assert.equal(Number(existing[0].count), 0, "Use a fresh test database with no team accounts");
-  assert.ok(process.env.AUTHORITY_REGISTRATION_KEY?.length >= 12);
+  assert.ok(authorityRegistrationKey?.length >= 12);
+  const [configurationRows] = await db.query("SELECT * FROM registration_config WHERE id=1");
+  assert.equal(configurationRows.length, 1);
+  const configuration = configurationRows[0];
+  assert.match(configuration.authority_key_hash, /^[a-f0-9]{32}:[a-f0-9]{128}$/i);
+  assert.notEqual(configuration.authority_key_hash, authorityRegistrationKey);
+  // Missing shared configuration must close registration even on the stale-env instance.
+  await db.query("DELETE FROM registration_config WHERE id=1");
+  try {
+    for (const host of [base, second]) {
+      await rejectAuth(
+        host,
+        {
+          action: "register-authority",
+          name: "QA Authority",
+          email: authorityEmail,
+          password,
+          department: "transport",
+          registrationKey: authorityRegistrationKey,
+        },
+        503,
+      );
+    }
+  } finally {
+    await db.query(
+      "INSERT INTO registration_config (id,authority_key_hash,team_code_secret,gmt_create,gmt_modified) VALUES (?,?,?,?,?)",
+      [
+        configuration.id,
+        configuration.authority_key_hash,
+        configuration.team_code_secret,
+        configuration.gmt_create,
+        configuration.gmt_modified,
+      ],
+    );
+  }
   for (const host of [base, second]) await checkStaffRegistration(host);
   await rejectAuth(
     base,
@@ -107,7 +142,7 @@ try {
       email: authorityEmail,
       password,
       department: "transport",
-      registrationKey: process.env.AUTHORITY_REGISTRATION_KEY,
+      registrationKey: authorityRegistrationKey,
     },
   });
   assert.equal(registeredAuthority.body.role, "authority");
@@ -115,6 +150,14 @@ try {
     cookie: registeredAuthority.cookie,
   });
   assert.match(dailyCode.body.code, /^\d{6}$/);
+  const secondDailyCode = await request(second, "/api/team-code", {
+    cookie: registeredAuthority.cookie,
+  });
+  assert.deepEqual(
+    secondDailyCode.body,
+    dailyCode.body,
+    "Both instances derive the same daily code from the database despite different environment settings",
+  );
   assert.equal((await fetch(second + "/api/team-code")).status, 403);
   await rejectAuth(
     base,
@@ -185,7 +228,7 @@ try {
       email: authorityEmail,
       password,
       department: "transport",
-      registrationKey: process.env.AUTHORITY_REGISTRATION_KEY,
+      registrationKey: authorityRegistrationKey,
     },
     409,
   );
