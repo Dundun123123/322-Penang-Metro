@@ -22,7 +22,7 @@
 
 1. 安装 Git、Node.js 22.12.0 或更新版本，以及 npm。
 2. 克隆仓库并在仓库根目录运行 `npm ci`。
-3. 复制 `.env.example` 为 `.env.local`，填写 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`。团队注册功能还需要 `TEAM_CODE_SECRET`；所有网站实例应填写同一个值。已有安装可暂时用 `LOCAL_SETUP_KEY` 作为兼容密钥。不要把 `.env.local` 提交到 Git。
+3. 复制 `.env.example` 为 `.env.local`，填写 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`。团队注册功能还需要 `TEAM_CODE_SECRET`；所有网站实例应填写同一个值。已有安装可暂时用 `LOCAL_SETUP_KEY` 作为兼容密钥。主管部门注册另需管理员生成独立随机值填写 `AUTHORITY_REGISTRATION_KEY`（至少 12 位），只私下交给获授权人员；未配置时关闭主管部门注册。不要把 `.env.local` 提交到 Git。
 4. 按 [共享 MySQL 配置](shared-mysql.md)准备数据库、Tailscale 和数据库账户，运行 `npm run db:check` 检查连接。
 5. 运行 `npm run build`，再运行 `npm start`。看到服务已启动后打开上面的地址。修改代码时可改用 `npm run dev`。
 
@@ -54,7 +54,7 @@
 
 ### 3.1 注册与登录
 
-打开 `/authority/register`，选择“交通局”或“政府／地方主管部门”，填写姓名、邮箱、至少 12 位密码和课程演示注册代码 `123456`。注册成功后进入 `/authority`；已有账号从 `/authority/login` 登录。这是平台内的协作角色，不会验证真实政府人员身份。固定代码仅适合受控的课程演示环境，不适合直接公开部署。
+打开 `/authority/register`，选择“交通局”或“政府／地方主管部门”，填写姓名、邮箱、至少 12 位密码和管理员私下提供的主管部门注册密钥。注册成功后进入 `/authority`；已有账号从 `/authority/login` 登录。这是平台内的协作角色，不会验证真实政府人员身份。旧的固定演示代码不再有效。
 
 ### 3.2 查看和处理居民反馈
 
@@ -104,6 +104,6 @@
 - **地图或搜索不显示**：检查互联网连接；地图底图和地点搜索依赖外部服务。已保存的公告资料不会因为地图底图暂时不可用而删除。
 - **注册码不正确**：确认使用当天的代码、网站服务的 `TEAM_CODE_SECRET` 一致，并在修改 `.env.local` 后重启网站。
 - **密码忘记**：目前没有自助邮件重置功能。不要删除数据库来尝试恢复账号。
-- **展示边界**：网站当前适合本地和可信网络内的课程演示。固定主管部门注册码 `123456` 和本地 HTTP 不适合公开互联网环境。
+- **展示边界**：网站当前适合本地和可信网络内的课程演示。主管部门注册密钥只应私下发给获授权人员；本地 HTTP 不适合公开互联网环境。
 
 开发者验证可运行 `npm run format:check`、`npm run lint`、`npm run typecheck`、`npm run build`。GitHub CI 另用隔离的 MySQL 测试数据库检查跨两个网站实例的数据流程；不会连接组员的共享数据库。

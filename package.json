@@ -14,7 +14,8 @@
     "lint": "eslint . --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
     "db:check": "node scripts/check-db.mjs",
-    "test:shared": "node scripts/smoke-local.mjs"
+    "test:shared": "node scripts/smoke-local.mjs",
+    "test:isolated": "node scripts/test-isolated-mysql.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -1,4 +1,5 @@
 import { consumeAuthAttempt } from "@/lib/auth-rate-limit";
+import { timingSafeEqual } from "node:crypto";
 import { PasswordBusyError } from "@/lib/password";
 import {
   createSession,
@@ -47,7 +48,7 @@ async function authenticate(request: Request) {
   const password = trim(input.password, 200);
   if (!isEmail(email) || !email || password.length < 8)
     return jsonError("Enter a valid email and a password of at least 8 characters");
-  if (!["login", "register", "setup-team"].includes(action))
+  if (!["login", "register", "register-authority", "register-team"].includes(action))
     return jsonError("Unknown authentication action");
   const db = getDb();
   const row = (await db
@@ -90,13 +91,17 @@ async function authenticate(request: Request) {
     const name = trim(input.name, 120);
     const departmentCode = trim(input.department, 40);
     const registrationKey = trim(input.registrationKey, 200);
-    const expectedKey = "123456";
+    const expectedKey = process.env.AUTHORITY_REGISTRATION_KEY;
+    if (!expectedKey || expectedKey.length < 12)
+      return jsonError("Authority registration is not configured", 503);
     if (name.length < 2) return jsonError("Enter the authority writer name");
     if (!(["transport", "local"] as string[]).includes(departmentCode))
       return jsonError("Choose a valid authority organisation");
     if (password.length < 12)
       return jsonError("Authority account passwords must contain at least 12 characters");
-    if (registrationKey !== expectedKey)
+    const provided = Buffer.from(registrationKey);
+    const expected = Buffer.from(expectedKey);
+    if (provided.length !== expected.length || !timingSafeEqual(provided, expected))
       return jsonError("The authority registration code is incorrect", 403);
     const id = crypto.randomUUID();
     const error = await db.withLock("metro-authority-registration", async (lockedDb) => {
@@ -104,13 +109,13 @@ async function authenticate(request: Request) {
         return "An account with this email already exists";
       await lockedDb
         .prepare(
-          "INSERT INTO users (id,email,name,password_hash,role,staff_kind,department,created_at) VALUES (?,?,?,?,?,?,?,?)",
+          "INSERT INTO app_user (id,email,name,password_hash,role,staff_kind,department,gmt_create) VALUES (?,?,?,?,?,?,?,?)",
         )
         .run(
           id,
           email,
           name,
-          hashPassword(password),
+          await hashPassword(password),
           "team",
           "authority",
           departmentCode,
@@ -123,7 +128,7 @@ async function authenticate(request: Request) {
     return Response.json({ ok: true, role: "authority" }, { status: 201 });
   }
   if (action === "register-team") {
-    const teamCode = trim(input.teamCode, 6);
+    const teamCode = trim(input.teamCode, 200);
     if (!currentTeamCode()) return jsonError("Team registration is not configured", 503);
     if (!validTeamCode(teamCode)) return jsonError("The team registration code is incorrect", 403);
     const name = trim(input.name, 120);

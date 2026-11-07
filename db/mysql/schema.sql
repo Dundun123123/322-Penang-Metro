@@ -2,6 +2,13 @@
 CREATE DATABASE IF NOT EXISTS penang_metro CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE penang_metro;
 
+CREATE TABLE IF NOT EXISTS auth_rate_limit (
+  bucket_key CHAR(64) NOT NULL PRIMARY KEY,
+  attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+  expires_at BIGINT NOT NULL,
+  KEY auth_rate_limit_expiry_idx (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS app_user (
   id VARCHAR(36) NOT NULL PRIMARY KEY,
   email VARCHAR(255) NOT NULL UNIQUE,

@@ -18,6 +18,7 @@ try {
   );
   console.log(identity[0]);
   const required = {
+    auth_rate_limit: ["bucket_key", "attempt_count", "expires_at"],
     app_user: [
       "id",
       "email",

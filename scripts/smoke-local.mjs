@@ -47,26 +47,58 @@ async function checkImage(host, route, cookie) {
   assert.equal(r.status, 200);
   assert.deepEqual(Buffer.from(await r.arrayBuffer()), png);
 }
-async function checkTeamSetup(host, available) {
-  const [auth, admin, page] = await Promise.all([
+async function checkStaffRegistration(host) {
+  const [auth, admin, teamPage, authorityPage] = await Promise.all([
     request(host, "/api/auth"),
     request(host, "/api/admin"),
-    fetch(host + "/team/login"),
+    fetch(host + "/team/register"),
+    fetch(host + "/authority/register"),
   ]);
-  assert.equal(auth.body.teamSetupAvailable, available, "Auth API reports team setup availability");
-  assert.equal(admin.body.needsSetup, available, "Admin API reports team setup availability");
-  assert.equal(page.status, 200, "Team login page renders successfully");
-  assert.equal(
-    (await page.text()).includes('name="setupKey"'),
-    available,
-    "Team login page shows setup only before the first team account exists",
-  );
+  assert.equal(auth.body.user, null);
+  assert.equal(admin.body.isAdmin, false);
+  assert.equal(teamPage.status, 200);
+  assert.equal(authorityPage.status, 200);
+  assert.ok((await teamPage.text()).includes('name="teamCode"'));
+  const authorityHtml = await authorityPage.text();
+  assert.ok(authorityHtml.includes('name="registrationKey"'));
+  assert.ok(!authorityHtml.includes(process.env.AUTHORITY_REGISTRATION_KEY));
+}
+async function rejectAuth(host, json, status) {
+  const response = await fetch(host + "/api/auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: host },
+    body: JSON.stringify(json),
+  });
+  assert.equal(response.status, status, JSON.stringify(await response.json()));
 }
 try {
   // Require a fresh isolated database; both website processes must use these test credentials.
   const [existing] = await db.query("SELECT COUNT(*) AS count FROM app_user WHERE role='team'");
   assert.equal(Number(existing[0].count), 0, "Use a fresh test database with no team accounts");
-  for (const host of [base, second]) await checkTeamSetup(host, true);
+  assert.ok(process.env.AUTHORITY_REGISTRATION_KEY?.length >= 12);
+  for (const host of [base, second]) await checkStaffRegistration(host);
+  await rejectAuth(
+    base,
+    {
+      action: "setup-team",
+      name: "Retired setup",
+      email: teamEmail,
+      password,
+    },
+    400,
+  );
+  await rejectAuth(
+    second,
+    {
+      action: "register-authority",
+      name: "QA Authority",
+      email: authorityEmail,
+      password,
+      department: "transport",
+      registrationKey: "123456",
+    },
+    403,
+  );
   const registeredAuthority = await request(base, "/api/auth", {
     method: "POST",
     json: {
@@ -75,7 +107,7 @@ try {
       email: authorityEmail,
       password,
       department: "transport",
-      registrationKey: "123456",
+      registrationKey: process.env.AUTHORITY_REGISTRATION_KEY,
     },
   });
   assert.equal(registeredAuthority.body.role, "authority");
@@ -84,6 +116,17 @@ try {
   });
   assert.match(dailyCode.body.code, /^\d{6}$/);
   assert.equal((await fetch(second + "/api/team-code")).status, 403);
+  await rejectAuth(
+    base,
+    {
+      action: "register-team",
+      name: "QA Team",
+      email: teamEmail,
+      password,
+      teamCode: dailyCode.body.code + "1",
+    },
+    403,
+  );
   assert.equal(
     (
       await fetch(second + "/api/auth", {
@@ -112,7 +155,7 @@ try {
   });
   const [teamRows] = await db.query("SELECT id FROM app_user WHERE email=?", [teamEmail]);
   assert.equal(teamRows.length, 1, "First website must point to this test database");
-  for (const host of [base, second]) await checkTeamSetup(host, false);
+  for (const host of [base, second]) await checkStaffRegistration(host);
   const resident = await request(second, "/api/auth", {
     method: "POST",
     json: { action: "register", name: "共享测试居民", email: residentEmail, password },
@@ -134,6 +177,29 @@ try {
   assert.equal(authorityRows[0].role, "team");
   assert.equal(authorityRows[0].staff_kind, "authority");
   assert.equal(authorityRows[0].department, "transport");
+  await rejectAuth(
+    base,
+    {
+      action: "register-authority",
+      name: "Duplicate Authority",
+      email: authorityEmail,
+      password,
+      department: "transport",
+      registrationKey: process.env.AUTHORITY_REGISTRATION_KEY,
+    },
+    409,
+  );
+  for (const [email, role] of [
+    [teamEmail, "authority"],
+    [authorityEmail, "team"],
+    [residentEmail, "authority"],
+  ]) {
+    await rejectAuth(second, { action: "login", email, password, role }, 403);
+  }
+  assert.equal(
+    (await fetch(base + "/api/team-code", { headers: { Cookie: resident.cookie } })).status,
+    403,
+  );
   const authority = await request(second, "/api/auth", {
     method: "POST",
     json: { action: "login", role: "authority", email: authorityEmail, password },
