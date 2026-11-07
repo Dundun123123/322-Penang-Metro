@@ -1,3 +1,4 @@
+import { readRequestBytes } from "@/lib/request-body";
 import { randomBytes, createHash } from "node:crypto";
 import { staffUser } from "@/lib/auth";
 export const validKinds = ["closure", "schedule", "transport", "safety", "business"] as const;
@@ -24,7 +25,9 @@ export function trim(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 export async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
-  const value: unknown = await request.json().catch(() => null);
+  const value: unknown = await readRequestBytes(request, 64_000)
+    .then((bytes) => JSON.parse(bytes.toString("utf8")))
+    .catch(() => null);
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;

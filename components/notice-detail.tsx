@@ -37,14 +37,15 @@ type Notice = {
 export default function NoticeDetail({ notice }: { notice: Notice }) {
   const { locale, setLocale, t } = useLocale();
   const dateLocale = { en: "en-MY", zh: "zh-CN", ms: "ms-MY" }[locale];
-  const format = (value?: string | null) =>
-    value
-      ? new Intl.DateTimeFormat(dateLocale, {
-          dateStyle: "medium",
-          timeStyle: "short",
-          timeZone: "Asia/Kuala_Lumpur",
-        }).format(new Date(value))
-      : t("dateUnknown");
+  const format = (value?: string | null) => {
+    const date = value ? new Date(value) : null;
+    if (!date || !Number.isFinite(date.getTime())) return t("dateUnknown");
+    return new Intl.DateTimeFormat(dateLocale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Kuala_Lumpur",
+    }).format(date);
+  };
   const routes = (decodeRoutePath(notice.routePath) || []).filter((branch) => branch.length > 0);
   const points = decodeNoticePoints(notice.pointData) || {};
   const stopChanges = getTransportStops(points);

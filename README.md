@@ -20,6 +20,8 @@
 
 完整配置步骤见 [三人共享数据库配置](docs/shared-mysql.md)。先完成该文档中的数据库准备，再启动网站。
 
+当前代码使用单数表名和 `gmt_create` / `gmt_modified` 时间字段。共享数据库已完成名称迁移时，只需更新所有电脑的代码并执行 `npm run db:check`，无需再次重命名；旧版代码不能继续连接改名后的数据库。新建空库使用 `db/mysql/schema.sql`。历史 `001-shared-uploads.sql` 和 `002-auth-rate-limits.sql` 仅适用于旧结构，不应在已改名的数据库执行。
+
 ## Windows 本地部署（新电脑）
 
 安装 Git 和 Node.js 22.12.0 或更新版本。打开 PowerShell，检查版本并克隆仓库：
@@ -117,6 +119,7 @@ npm run dev
 ```powershell
 git pull --ff-only
 npm ci
+npm run db:check
 npm run build
 npm start
 ```

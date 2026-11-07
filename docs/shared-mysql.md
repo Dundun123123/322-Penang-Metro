@@ -2,11 +2,15 @@
 
 需要 MySQL 8.4、Node.js 22.12+，三台电脑的 Tailscale 在线。数据库主机必须开机、不休眠并运行 MySQL；DBeaver 可关闭。
 
-## 1. 数据库主机操作一次
+## 1. 数据库准备
 
-原有七张表及上一轮新增字段需已创建：app_user、auth_session、notice、report、report_event、notice_subscription、notice_image。使用 root 在 DBeaver 执行 `db/mysql/001-shared-uploads.sql`，添加第八张 `uploaded_file` 并放宽两个原字段长度。已有数据库账号对 `penang_metro.*` 的 SELECT/INSERT/UPDATE/DELETE 授权覆盖新表，无需授予建表权限。网站启动不会自动建表或修改结构。
+当前代码使用 9 张表：`app_user`、`auth_session`、`notice`、`report`、`report_event`、`notice_subscription`、`notice_image`、`uploaded_file`、`auth_rate_limit`。创建和修改时间字段分别为 `gmt_create`、`gmt_modified`，认证限流计数字段为 `attempt_count`。
 
-新安装的空数据库可使用 `db/mysql/schema.sql` 创建完整结构。该脚本的 CREATE IF NOT EXISTS 不负责修复旧表缺失的字段。
+- 已完成名称迁移的共享数据库：无需再次执行重命名或旧建表脚本。三台电脑都更新到当前代码，在各自项目目录运行 `npm run db:check` 后重启网站。旧版代码不能与改名后的数据库混用。
+- 新安装的空数据库：由数据库管理员执行 `db/mysql/schema.sql` 创建当前完整结构。该脚本使用 CREATE IF NOT EXISTS，不会迁移旧表或修补已有表。
+- 仍使用旧复数表名的数据库：先由管理员完成约定的表名、时间字段及认证计数字段迁移，再运行当前代码。历史 `db/mysql/001-shared-uploads.sql` 和 `db/mysql/002-auth-rate-limits.sql` 只适用于旧结构，不能用来更新已改名的数据库，也不要在新结构中重复执行。
+
+已有数据库账号对 `penang_metro.*` 的 SELECT/INSERT/UPDATE/DELETE 授权覆盖这些表，无需授予建表权限；若原先按单表授权，由管理员将授权同步至新表名。网站启动不会自动建表或修改结构。
 
 ## 2. 每人设置自己的 .env.local
 
@@ -44,7 +48,7 @@ npm run db:check
 npm run dev
 ```
 
-打开 `http://localhost:5173`。`db:check` 只读检查连接身份、八张表的必要字段以及图片上传所需的包大小，不会新增测试账号或修改数据。修改 .env.local 后重启网站。
+打开 `http://localhost:5173`。`db:check` 只读检查连接身份、九张表的必要字段以及图片上传所需的包大小，不会新增测试账号或修改数据。修改 .env.local 后重启网站。
 
 如果提示 max_allowed_packet 不足，用 root 执行 `SET PERSIST max_allowed_packet = 67108864;`，然后重启网站以建立新连接。5 MB 图片以二进制参数传输时需留足包大小余量。
 
@@ -72,3 +76,7 @@ npm run dev
 ## 开发验证（仅限独立测试数据库）
 
 `npm run test:shared` 会创建测试账号、报告、公告并清理，仅在独立测试库和两个测试网站实例上运行。通过 SMOKE_BASE_URL、SMOKE_SECOND_BASE_URL 指定两个地址，SMOKE_ALLOW_WRITES=1 明确允许测试数据写入。不要对小组实际数据库运行这个测试。
+
+## Backend update
+
+当前代码已适配共享数据库的新名称。已完成重命名的数据库运行 `npm run db:check` 即可检查兼容性，无需再次执行重命名。详细说明见 [后端更新说明](backend-fixes.md)。

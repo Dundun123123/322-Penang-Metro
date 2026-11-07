@@ -6,7 +6,7 @@ export async function GET() {
   const user = await getLocalUser();
   if (!user) return jsonError("Sign in is required", 401);
   const row = (await getDb()
-    .prepare("SELECT categories FROM subscriptions WHERE user_id=?")
+    .prepare("SELECT categories FROM notice_subscription WHERE user_id=?")
     .get(user.id)) as { categories: string } | undefined;
   return Response.json({ categories: row ? JSON.parse(row.categories) : [] });
 }
@@ -23,7 +23,7 @@ export async function PUT(request: Request) {
   const categories = JSON.stringify([...new Set(body.categories as string[])]);
   await getDb()
     .prepare(
-      `INSERT INTO subscriptions (user_id,categories,updated_at) VALUES (?,?,?) AS incoming ON DUPLICATE KEY UPDATE categories=incoming.categories,updated_at=incoming.updated_at`,
+      `INSERT INTO notice_subscription (user_id,categories,gmt_modified) VALUES (?,?,?) AS incoming ON DUPLICATE KEY UPDATE categories=incoming.categories,gmt_modified=incoming.gmt_modified`,
     )
     .run(user.id, categories, new Date().toISOString());
   return Response.json({ categories: JSON.parse(categories) });

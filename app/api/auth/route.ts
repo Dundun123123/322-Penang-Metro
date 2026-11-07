@@ -1,3 +1,5 @@
+import { consumeAuthAttempt } from "@/lib/auth-rate-limit";
+import { PasswordBusyError } from "@/lib/password";
 import {
   createSession,
   destroySession,
@@ -19,6 +21,20 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  try {
+    return await authenticate(request);
+  } catch (error) {
+    if (error instanceof PasswordBusyError)
+      return Response.json(
+        { error: error.message },
+        { status: 503, headers: { "Retry-After": "1" } },
+      );
+    if (error && typeof error === "object" && "code" in error && error.code === "ER_DUP_ENTRY")
+      return jsonError("An account with this email already exists", 409);
+    throw error;
+  }
+}
+async function authenticate(request: Request) {
   if (!sameOrigin(request)) return jsonError("Invalid origin", 403);
   const input = await readJsonObject(request);
   if (!input) return jsonError("Invalid request");
@@ -31,18 +47,42 @@ export async function POST(request: Request) {
   const password = trim(input.password, 200);
   if (!isEmail(email) || !email || password.length < 8)
     return jsonError("Enter a valid email and a password of at least 8 characters");
+  if (!["login", "register", "setup-team"].includes(action))
+    return jsonError("Unknown authentication action");
   const db = getDb();
+  const row = (await db
+    .prepare(
+      "SELECT id,email,name,password_hash AS passwordHash,role,staff_kind AS staffKind FROM app_user WHERE email=?",
+    )
+    .get(email)) as
+    | {
+        id: string;
+        email: string;
+        name: string;
+        passwordHash: string;
+        role: string;
+        staffKind: string | null;
+      }
+    | undefined;
+  const quota = await consumeAuthAttempt(action, row ? "user:" + row.id : "email:" + email);
+  if (!quota.allowed)
+    return Response.json(
+      { error: "Too many attempts. Please wait before trying again." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(quota.retryAfter), "Cache-Control": "no-store" },
+      },
+    );
   if (action === "register") {
     const name = trim(input.name, 120);
     if (name.length < 2) return jsonError("Enter your name");
-    if (await db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
-      return jsonError("An account with this email already exists", 409);
+    if (row) return jsonError("An account with this email already exists", 409);
     const id = crypto.randomUUID();
     await db
       .prepare(
-        "INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO app_user (id,email,name,password_hash,role,gmt_create) VALUES (?,?,?,?,?,?)",
       )
-      .run(id, email, name, hashPassword(password), "resident", new Date().toISOString());
+      .run(id, email, name, await hashPassword(password), "resident", new Date().toISOString());
     await createSession(id);
     return Response.json({ ok: true, role: "resident" }, { status: 201 });
   }
@@ -60,7 +100,7 @@ export async function POST(request: Request) {
       return jsonError("The authority registration code is incorrect", 403);
     const id = crypto.randomUUID();
     const error = await db.withLock("metro-authority-registration", async (lockedDb) => {
-      if (await lockedDb.prepare("SELECT 1 FROM users WHERE email=?").get(email))
+      if (await lockedDb.prepare("SELECT 1 FROM app_user WHERE email=?").get(email))
         return "An account with this email already exists";
       await lockedDb
         .prepare(
@@ -90,13 +130,13 @@ export async function POST(request: Request) {
     if (name.length < 2) return jsonError("Enter the team member name");
     const id = crypto.randomUUID();
     const error = await db.withLock("metro-team-registration", async (db) => {
-      if (await db.prepare("SELECT 1 FROM users WHERE email=?").get(email))
+      if (await db.prepare("SELECT 1 FROM app_user WHERE email=?").get(email))
         return "An account with this email already exists";
       await db
         .prepare(
-          "INSERT INTO users (id,email,name,password_hash,role,created_at) VALUES (?,?,?,?,?,?)",
+          "INSERT INTO app_user (id,email,name,password_hash,role,gmt_create) VALUES (?,?,?,?,?,?)",
         )
-        .run(id, email, name, hashPassword(password), "team", new Date().toISOString());
+        .run(id, email, name, await hashPassword(password), "team", new Date().toISOString());
       return null;
     });
     if (error) return jsonError(error, 409);
@@ -105,21 +145,7 @@ export async function POST(request: Request) {
   }
   if (action === "login") {
     const expectedRole = trim(input.role, 20);
-    const row = (await db
-      .prepare(
-        "SELECT id,email,name,password_hash AS passwordHash,role,staff_kind AS staffKind FROM users WHERE email=?",
-      )
-      .get(email)) as
-      | {
-          id: string;
-          email: string;
-          name: string;
-          passwordHash: string;
-          role: string;
-          staffKind: string | null;
-        }
-      | undefined;
-    if (!row || !verifyPassword(password, row.passwordHash))
+    if (!row || !(await verifyPassword(password, row.passwordHash)))
       return jsonError("Email or password is incorrect", 401);
     const actualRole =
       row.role === "team" && row.staffKind === "authority" ? "authority" : row.role;

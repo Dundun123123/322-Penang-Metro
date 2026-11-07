@@ -13,7 +13,7 @@ export default async function FullMapPage({ params }: { params: Promise<{ id: st
   if (!(await getLocalUser())) redirect(`/login?next=${encodeURIComponent(`/updates/${id}/map`)}`);
   const notice = (await getDb()
     .prepare(
-      "SELECT id, kind, title_en AS titleEn, location, route_path AS routePath, point_data AS pointData FROM notices WHERE id=? AND status='published'",
+      "SELECT id, kind, title_en AS titleEn, location, route_path AS routePath, point_data AS pointData FROM notice WHERE id=? AND status='published'",
     )
     .get(id)) as
     | {

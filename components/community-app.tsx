@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { kinds, issueKinds, languageNames, locales, localText } from "@/lib/i18n";
 import { useLocale } from "@/lib/use-locale";
 import { remainingDays } from "@/lib/notice-features";
@@ -31,6 +31,7 @@ type Report = {
   status: string;
   createdAt: string;
   hasPhoto: boolean;
+  canViewPhoto: boolean;
 };
 type Event = {
   id: string;
@@ -56,6 +57,12 @@ const dateLocale = { en: "en-MY", zh: "zh-CN", ms: "ms-MY" };
 export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
   const { locale, setLocale, t } = useLocale();
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [matchingAlerts, setMatchingAlerts] = useState<Notice[]>([]);
+  const [overview, setOverview] = useState<Notice[]>([]);
+  const [nextPage, setNextPage] = useState<number | null>(null);
+  const [loadingNotices, setLoadingNotices] = useState(false);
+  const [loadedQuery, setLoadedQuery] = useState("");
+  const activeQuery = useRef("");
   const [loadError, setLoadError] = useState("");
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -72,26 +79,92 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
 
   useEffect(() => {
     api<{ notices: Notice[] }>("/api/notices")
-      .then((data) => setNotices(data.notices))
+      .then((data) => setOverview(data.notices))
       .catch((error) => setLoadError(error.message));
     api<{ categories: string[] }>("/api/subscriptions")
       .then((data) => setSubscribed(data.categories))
       .catch(() => {});
   }, []);
 
-  const visible = useMemo(
-    () =>
-      notices.filter((notice) => {
-        const matchesKind = filter === "all" || notice.kind === filter;
-        const text = [notice.location, notice.titleEn, notice.titleZh, notice.titleMs]
-          .join(" ")
-          .toLowerCase();
-        return matchesKind && text.includes(search.toLowerCase());
-      }),
-    [notices, filter, search],
-  );
-  const matchingAlerts = notices.filter((notice) => subscribed.includes(notice.kind));
-  const latest = notices[0];
+  const query = new URLSearchParams({
+    q: search,
+    ...(filter === "all" ? {} : { kind: filter }),
+  }).toString();
+  useEffect(() => {
+    activeQuery.current = query;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setLoadingNotices(true);
+      api<{ notices: Notice[]; nextPage: number | null }>("/api/notices?" + query, {
+        signal: controller.signal,
+      })
+        .then((data) => {
+          if (controller.signal.aborted) return;
+          setNotices(data.notices);
+          setNextPage(data.nextPage);
+          setLoadedQuery(query);
+          setLoadError("");
+        })
+        .catch((error) => {
+          if (!controller.signal.aborted) setLoadError(error.message);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoadingNotices(false);
+        });
+    }, 200);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
+  async function loadMoreNotices() {
+    if (nextPage === null || loadingNotices || loadedQuery !== query) return;
+    const currentQuery = query;
+    setLoadingNotices(true);
+    try {
+      const data = await api<{ notices: Notice[]; nextPage: number | null }>(
+        "/api/notices?" + query + "&page=" + nextPage,
+      );
+      if (activeQuery.current !== currentQuery) return;
+      setNotices((current) => [
+        ...current,
+        ...data.notices.filter((item) => !current.some((old) => old.id === item.id)),
+      ]);
+      setNextPage(data.nextPage);
+      setLoadError("");
+    } catch (error) {
+      if (activeQuery.current === currentQuery)
+        setLoadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (activeQuery.current === currentQuery) setLoadingNotices(false);
+    }
+  }
+  const visible = loadedQuery === query ? notices : [];
+  const subscribedQuery = subscribed.join(",");
+  useEffect(() => {
+    const controller = new AbortController();
+    const categories = subscribedQuery ? subscribedQuery.split(",") : [];
+    Promise.all(
+      categories.map((kind) =>
+        api<{ notices: Notice[] }>("/api/notices?kind=" + encodeURIComponent(kind), {
+          signal: controller.signal,
+        }),
+      ),
+    )
+      .then((pages) => {
+        if (!controller.signal.aborted)
+          setMatchingAlerts(
+            pages
+              .flatMap((page) => page.notices)
+              .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)),
+          );
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setAlertMessage(error.message);
+      });
+    return () => controller.abort();
+  }, [subscribedQuery]);
+  const latest = overview[0];
 
   function formatDate(value?: string | null) {
     if (!value) return "";
@@ -322,9 +395,23 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
             {visible.length ? (
               visible.map(noticeCard)
             ) : (
-              <div className="empty-state">{t("noNotices")}</div>
+              <div className="empty-state">
+                {t(
+                  !loadError && (loadingNotices || loadedQuery !== query) ? "loading" : "noNotices",
+                )}
+              </div>
             )}
           </div>
+          {nextPage !== null && loadedQuery === query && (
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={loadingNotices}
+              onClick={loadMoreNotices}
+            >
+              {loadingNotices ? t("loading") : t("loadMoreNotices")}
+            </button>
+          )}
         </section>
         <section className="section report-section" id="report">
           <div className="section-intro">
@@ -531,7 +618,7 @@ export default function CommunityApp({ signedIn }: { signedIn: boolean }) {
                     </li>
                   ))}
                 </ol>
-                {trackData.report.hasPhoto && (
+                {trackData.report.canViewPhoto && (
                   <a
                     className="map-link"
                     href={`/api/reports/photo?reference=${encodeURIComponent(trackData.report.reference)}`}

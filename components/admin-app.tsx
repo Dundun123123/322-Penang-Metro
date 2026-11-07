@@ -15,6 +15,7 @@ import {
 
 type NoticeForm = {
   id?: string;
+  updatedAt?: string;
   images?: { id: string }[];
   kind: string;
   status: string;
@@ -473,16 +474,18 @@ async function fetchAdminData() {
     return {
       account,
       notices: [] as NoticeForm[],
+      noticeNextPage: null as number | null,
       reports: [] as Report[],
       reportNextPage: null as number | null,
     };
   const [noticeData, reportData] = await Promise.all([
-    api<{ notices: NoticeForm[] }>("/api/notices?all=1"),
+    api<{ notices: NoticeForm[]; nextPage: number | null }>("/api/notices?all=1"),
     api<{ reports: Report[]; nextPage: number | null }>("/api/admin/reports"),
   ]);
   return {
     account,
     notices: noticeData.notices,
+    noticeNextPage: noticeData.nextPage,
     reports: reportData.reports,
     reportNextPage: reportData.nextPage,
   };
@@ -509,6 +512,8 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
     role === "authority" ? "reports" : "notices",
   );
   const [notices, setNotices] = useState<NoticeForm[]>([]);
+  const [noticeNextPage, setNoticeNextPage] = useState<number | null>(null);
+  const [noticesLoading, setNoticesLoading] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [reportNextPage, setReportNextPage] = useState<number | null>(null);
   const [reportsLoading, setReportsLoading] = useState(false);
@@ -536,6 +541,7 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
   function applyAdminData(data: Awaited<ReturnType<typeof fetchAdminData>>) {
     setAuth(data.account);
     setNotices(data.notices);
+    setNoticeNextPage(data.noticeNextPage);
     setReports(data.reports);
     setReportNextPage(data.reportNextPage);
   }
@@ -609,6 +615,54 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
       active = false;
     };
   }, [selectedReport]);
+  async function loadMoreNotices() {
+    if (noticeNextPage === null || noticesLoading) return;
+    setNoticesLoading(true);
+    try {
+      const data = await api<{ notices: NoticeForm[]; nextPage: number | null }>(
+        `/api/notices?all=1&page=${noticeNextPage}`,
+      );
+      setNotices((current) => [
+        ...current,
+        ...data.notices.filter((item) => !current.some((old) => old.id === item.id)),
+      ]);
+      setNoticeNextPage(data.nextPage);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setNoticesLoading(false);
+    }
+  }
+  function editNotice(item: NoticeForm) {
+    setSelectedImages([]);
+    setIsDraftOnServer(item.status === "draft");
+    setNotice({
+      ...item,
+      startAt: localInput(item.startAt),
+      endAt: localInput(item.endAt),
+      diversion: item.diversion || "",
+      latitude: item.latitude || "",
+      longitude: item.longitude || "",
+      pointData: item.pointData || "",
+      progressPercent: item.progressPercent ?? (item.kind === "schedule" ? 0 : null),
+    });
+  }
+  async function reloadNotice() {
+    if (!notice.id) return;
+    setBusy(true);
+    try {
+      const data = await api<{ notices: NoticeForm[] }>(
+        `/api/notices?all=1&id=${encodeURIComponent(notice.id)}`,
+      );
+      if (!data.notices[0]) throw new Error("Notice not found");
+      editNotice(data.notices[0]);
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function loadMoreReports() {
     if (reportNextPage === null || reportsLoading) return;
     setReportsLoading(true);
@@ -701,28 +755,36 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
       const stageDraft =
         selectedImages.length > 0 && requestedStatus === "published" && isDraftOnServer;
       if (!notice.id && !noticeRequestId.current) noticeRequestId.current = newUploadId();
-      const saved = await api<{ notice?: { id: string; reused?: boolean } }>("/api/notices", {
-        method: notice.id ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...payload,
-          clientRequestId: notice.id ? undefined : noticeRequestId.current,
-          status: stageDraft ? "draft" : requestedStatus,
-        }),
-      });
+      const saved = await api<{ notice: { id: string; updatedAt: string; reused?: boolean } }>(
+        "/api/notices",
+        {
+          method: notice.id ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...payload,
+            clientRequestId: notice.id ? undefined : noticeRequestId.current,
+            status: stageDraft ? "draft" : requestedStatus,
+          }),
+        },
+      );
       const noticeId = notice.id || saved.notice?.id;
       if (!noticeId) throw new Error("Notice was not created");
-      setNotice((current) => ({ ...current, id: noticeId }));
-      if (saved.notice?.reused)
-        await api("/api/notices", {
+      let updatedAt = saved.notice.updatedAt;
+      setNotice((current) => ({ ...current, id: noticeId, updatedAt }));
+      if (saved.notice.reused) {
+        const changed = await api<{ notice: { updatedAt: string } }>("/api/notices", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...payload,
             id: noticeId,
+            updatedAt,
             status: stageDraft ? "draft" : requestedStatus,
           }),
         });
+        updatedAt = changed.notice.updatedAt;
+        setNotice((current) => ({ ...current, updatedAt }));
+      }
       draftPending = stageDraft || requestedStatus === "draft";
       setIsDraftOnServer(draftPending);
       for (const file of [...selectedImages]) {
@@ -746,11 +808,13 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
         setSelectedImages((current) => current.filter((pending) => pending !== file));
       }
       if (stageDraft) {
-        await api("/api/notices", {
+        const published = await api<{ notice: { updatedAt: string } }>("/api/notices", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, id: noticeId, status: "published" }),
+          body: JSON.stringify({ ...payload, id: noticeId, updatedAt, status: "published" }),
         });
+        updatedAt = published.notice.updatedAt;
+        setNotice((current) => ({ ...current, updatedAt }));
         draftPending = false;
         setIsDraftOnServer(false);
       }
@@ -1089,13 +1153,16 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
               <button
                 type="button"
                 className={tab === "notices" ? "active" : ""}
+                disabled={busy}
                 onClick={() => setTab("notices")}
               >
-                {a.notices} ({notices.length})
+                {a.notices} ({notices.length}
+                {noticeNextPage !== null ? "+" : ""})
               </button>
               <button
                 type="button"
                 className={tab === "reports" ? "active" : ""}
+                disabled={busy}
                 onClick={() => setTab("reports")}
               >
                 {a.reports} ({reports.length}
@@ -1105,6 +1172,7 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
                 <button
                   type="button"
                   className={tab === "accounts" ? "active" : ""}
+                  disabled={busy}
                   onClick={() => setTab("accounts")}
                 >
                   {p.accounts} ({authorityAccounts.length})
@@ -1130,6 +1198,7 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
                       <button
                         key={kind}
                         type="button"
+                        disabled={busy}
                         aria-pressed={notice.kind === kind}
                         className={notice.kind === kind ? "active" : ""}
                         title={f.newKind}
@@ -1144,7 +1213,7 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
                       </button>
                     ))}
                   </div>
-                  <form className="admin-form" onSubmit={saveNotice}>
+                  <form className="admin-form" onSubmit={saveNotice} inert={busy} aria-busy={busy}>
                     <label>
                       {a.status}
                       <select
@@ -1387,6 +1456,16 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
                 </section>
                 <aside className="admin-surface">
                   <h2>{a.notices}</h2>
+                  {notice.id && (
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      disabled={busy}
+                      onClick={reloadNotice}
+                    >
+                      {t("reloadSavedNotice")}
+                    </button>
+                  )}
                   <div className="admin-list">
                     {notices.length ? (
                       notices.map((item) => (
@@ -1394,25 +1473,8 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
                           key={item.id}
                           type="button"
                           className={notice.id === item.id ? "active" : ""}
-                          onClick={() => {
-                            setSelectedImages([]);
-                            setIsDraftOnServer(item.status === "draft");
-                            setNotice({
-                              ...item,
-                              titleZh: "",
-                              titleMs: "",
-                              bodyZh: "",
-                              bodyMs: "",
-                              startAt: localInput(item.startAt),
-                              endAt: localInput(item.endAt),
-                              diversion: item.diversion || "",
-                              latitude: item.latitude || "",
-                              longitude: item.longitude || "",
-                              pointData: item.pointData || "",
-                              progressPercent:
-                                item.progressPercent ?? (item.kind === "schedule" ? 0 : null),
-                            });
-                          }}
+                          disabled={busy}
+                          onClick={() => editNotice(item)}
                         >
                           <span className="pill">
                             {a[item.status as "draft" | "published" | "archived"]}
@@ -1430,6 +1492,16 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
                       <p>{a.noNotices}</p>
                     )}
                   </div>
+                  {noticeNextPage !== null && (
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      disabled={noticesLoading}
+                      onClick={loadMoreNotices}
+                    >
+                      {noticesLoading ? t("loading") : t("loadMoreNotices")}
+                    </button>
+                  )}
                 </aside>
               </div>
             ) : tab === "reports" ? (
@@ -1628,6 +1700,17 @@ export default function AdminApp({ role = "team" }: { role?: "team" | "authority
                           </select>
                         </label>
                       )}
+                      {(newStatus === "resolved" || newStatus === "closed") &&
+                        noticeNextPage !== null && (
+                          <button
+                            type="button"
+                            className="button button-secondary"
+                            disabled={busy || noticesLoading}
+                            onClick={loadMoreNotices}
+                          >
+                            {noticesLoading ? t("loading") : t("loadMoreNotices")}
+                          </button>
+                        )}
                       <button className="button button-primary" disabled={busy}>
                         {a.update}
                       </button>

@@ -1,3 +1,4 @@
+import { canViewReportPhoto } from "@/lib/report-permissions";
 import { getDb } from "@/db";
 import { getLocalUser } from "@/lib/auth";
 import { jsonError, readJsonObject, sameOrigin, sha256, trim } from "@/lib/server";
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
 
   const row = (await getDb()
     .prepare(
-      `SELECT id,reference,access_hash AS accessHash,owner_user_id AS ownerUserId,kind,location,description,photo_key AS photoKey,status,created_at AS createdAt,updated_at AS updatedAt FROM reports WHERE reference=?`,
+      `SELECT id,reference,access_hash AS accessHash,owner_user_id AS ownerUserId,kind,location,description,photo_key AS photoKey,status,gmt_create AS createdAt,gmt_modified AS updatedAt FROM report WHERE reference=?`,
     )
     .get(reference)) as ReportRow | undefined;
   if (!row) return jsonError("Report not found", 404);
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
 
   const events = await getDb()
     .prepare(
-      `SELECT e.id,e.status,e.note_en AS noteEn,e.note_zh AS noteZh,e.note_ms AS noteMs,e.actor_name AS actorName,e.actor_role AS actorRole,CASE WHEN n.status='published' THEN e.notice_id ELSE NULL END AS noticeId,CASE WHEN n.status='published' THEN n.title_en ELSE NULL END AS noticeTitle,e.created_at AS createdAt FROM report_events e LEFT JOIN notices n ON n.id=e.notice_id WHERE e.report_id=? ORDER BY e.created_at`,
+      `SELECT e.id,e.status,e.note_en AS noteEn,e.note_zh AS noteZh,e.note_ms AS noteMs,e.actor_name AS actorName,e.actor_role AS actorRole,CASE WHEN n.status='published' THEN e.notice_id ELSE NULL END AS noticeId,CASE WHEN n.status='published' THEN n.title_en ELSE NULL END AS noticeTitle,e.gmt_create AS createdAt FROM report_event e LEFT JOIN notice n ON n.id=e.notice_id WHERE e.report_id=? ORDER BY e.gmt_create`,
     )
     .all(row.id);
   const report = {
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     hasPhoto: Boolean(row.photoKey),
+    canViewPhoto: Boolean(row.photoKey) && canViewReportPhoto(user, row.ownerUserId),
   };
   return Response.json({ report, events }, { headers: { "Cache-Control": "private, no-store" } });
 }

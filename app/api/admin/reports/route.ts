@@ -19,12 +19,12 @@ export async function GET(request: Request) {
   const reference = trim(params.get("reference"), 40).toUpperCase();
   if (reference) {
     const report = (await getDb()
-      .prepare("SELECT id FROM reports WHERE reference=?")
+      .prepare("SELECT id FROM report WHERE reference=?")
       .get(reference)) as { id: string } | undefined;
     if (!report) return jsonError("Report not found", 404);
     const rows = await getDb()
       .prepare(
-        `SELECT e.id,e.report_id AS reportId,e.status,e.note_en AS noteEn,e.note_zh AS noteZh,e.note_ms AS noteMs,e.actor_name AS actorName,e.actor_role AS actorRole,e.notice_id AS noticeId,n.title_en AS noticeTitle,e.created_at AS createdAt FROM report_events e LEFT JOIN notices n ON n.id=e.notice_id AND n.status='published' WHERE e.report_id=? ORDER BY e.created_at DESC,e.id DESC LIMIT ? OFFSET ?`,
+        `SELECT e.id,e.report_id AS reportId,e.status,e.note_en AS noteEn,e.note_zh AS noteZh,e.note_ms AS noteMs,e.actor_name AS actorName,e.actor_role AS actorRole,e.notice_id AS noticeId,n.title_en AS noticeTitle,e.gmt_create AS createdAt FROM report_event e LEFT JOIN notice n ON n.id=e.notice_id AND n.status='published' WHERE e.report_id=? ORDER BY e.gmt_create DESC,e.id DESC LIMIT ? OFFSET ?`,
       )
       .all(report.id, pageSize + 1, offset);
     return Response.json({
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   }
   const rows = await getDb()
     .prepare(
-      `SELECT id,reference,kind,location,description,contact_email AS contactEmail,status,created_at AS createdAt,photo_key IS NOT NULL AS hasPhoto FROM reports ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`,
+      `SELECT id,reference,kind,location,description,contact_email AS contactEmail,status,gmt_create AS createdAt,photo_key IS NOT NULL AS hasPhoto FROM report ORDER BY gmt_create DESC,id DESC LIMIT ? OFFSET ?`,
     )
     .all(pageSize + 1, offset);
   return Response.json({
@@ -56,7 +56,7 @@ export async function PATCH(request: Request) {
   if (!reference || !validStatuses.includes(status as never) || noteEn.length < 5)
     return jsonError("Reference, status and a response note of at least 5 characters are required");
   const found = (await getDb()
-    .prepare("SELECT id,status FROM reports WHERE reference=?")
+    .prepare("SELECT id,status FROM report WHERE reference=?")
     .get(reference)) as { id: string; status: string } | undefined;
   if (!found) return jsonError("Report not found", 404);
   if (validStatuses.indexOf(status as never) < validStatuses.indexOf(found.status as never))
@@ -66,7 +66,7 @@ export async function PATCH(request: Request) {
       return jsonError("A related notice can only be attached to a resolved or closed report");
     if (
       !(await getDb()
-        .prepare("SELECT 1 FROM notices WHERE id=? AND status='published'")
+        .prepare("SELECT 1 FROM notice WHERE id=? AND status='published'")
         .get(noticeId))
     )
       return jsonError("Select a published notice", 400);
@@ -75,7 +75,7 @@ export async function PATCH(request: Request) {
   const db = getDb();
   const saved = await db.transaction(async (db) => {
     const current = await db
-      .prepare("SELECT status FROM reports WHERE id=? FOR UPDATE")
+      .prepare("SELECT status FROM report WHERE id=? FOR UPDATE")
       .get(found.id);
     if (
       !current ||
@@ -83,11 +83,11 @@ export async function PATCH(request: Request) {
     )
       return false;
     await db
-      .prepare("UPDATE reports SET status=?,updated_at=? WHERE id=?")
+      .prepare("UPDATE report SET status=?,gmt_modified=? WHERE id=?")
       .run(status, now, found.id);
     await db
       .prepare(
-        "INSERT INTO report_events (id,report_id,status,note_en,note_zh,note_ms,actor_name,actor_role,notice_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO report_event (id,report_id,status,note_en,note_zh,note_ms,actor_name,actor_role,notice_id,gmt_create) VALUES (?,?,?,?,?,?,?,?,?,?)",
       )
       .run(
         crypto.randomUUID(),

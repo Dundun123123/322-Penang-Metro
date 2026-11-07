@@ -3,25 +3,51 @@ import { getLocalUser } from "@/lib/auth";
 import { adminUser, jsonError, readJsonObject, sameOrigin, trim, validKinds } from "@/lib/server";
 import { decodeRoutePath, encodeRoutePath } from "@/lib/route-path";
 import { decodeNoticePoints, getTransportStops, hasCoordinates } from "@/lib/notice-features";
+import { noticeDates } from "@/lib/notice-dates";
 export const runtime = "nodejs";
-const fullColumns = `id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,body_en AS bodyEn,body_zh AS bodyZh,body_ms AS bodyMs,location,start_at AS startAt,end_at AS endAt,diversion,latitude,longitude,route_path AS routePath,progress_percent AS progressPercent,point_data AS pointData,created_at AS createdAt,updated_at AS updatedAt`;
-const summaryColumns = `id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,location,start_at AS startAt,end_at AS endAt,progress_percent AS progressPercent,created_at AS createdAt`;
+const fullColumns = `id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,body_en AS bodyEn,body_zh AS bodyZh,body_ms AS bodyMs,location,start_at AS startAt,end_at AS endAt,diversion,latitude,longitude,route_path AS routePath,progress_percent AS progressPercent,point_data AS pointData,gmt_create AS createdAt,gmt_modified AS updatedAt`;
+const summaryColumns = `id,kind,status,title_en AS titleEn,title_zh AS titleZh,title_ms AS titleMs,location,start_at AS startAt,end_at AS endAt,progress_percent AS progressPercent,gmt_create AS createdAt`;
 export async function GET(request: Request) {
-  const all = new URL(request.url).searchParams.get("all") === "1";
+  const params = new URL(request.url).searchParams;
+  const all = params.get("all") === "1";
   if (all && !(await adminUser())) return jsonError("Forbidden", 403);
+  const pageText = params.get("page") || "0";
+  if (!/^(0|[1-9]\d{0,5})$/.test(pageText)) return jsonError("Invalid page");
+  const page = Number(pageText),
+    pageSize = 30;
+  const id = trim(params.get("id"), 60);
+  const kind = trim(params.get("kind"), 30);
+  const search = trim(params.get("q"), 160);
+  if (kind && !validKinds.includes(kind as never)) return jsonError("Invalid category");
+  const conditions: string[] = all ? [] : ["status='published'"];
+  const values: (string | number)[] = [];
+  if (id) {
+    conditions.push("id=?");
+    values.push(id);
+  }
+  if (kind) {
+    conditions.push("kind=?");
+    values.push(kind);
+  }
+  if (search) {
+    conditions.push(
+      "(LOCATE(LOWER(?),LOWER(CONCAT_WS(' ',location,title_en,title_zh,title_ms)))>0)",
+    );
+    values.push(search);
+  }
   const columns = all || (await getLocalUser()) ? fullColumns : summaryColumns;
   const rows = await getDb()
     .prepare(
-      `SELECT ${columns} FROM notices ${all ? "" : "WHERE status='published'"} ORDER BY created_at DESC LIMIT ?`,
+      `SELECT ${columns} FROM notice ${conditions.length ? "WHERE " + conditions.join(" AND ") : ""} ORDER BY gmt_create DESC,id DESC LIMIT ? OFFSET ?`,
     )
-    .all(all ? 200 : 100);
-  const typedRows = rows as Array<{ id: string }>;
+    .all(...values, pageSize + 1, page * pageSize);
+  const typedRows = rows.slice(0, pageSize) as Array<{ id: string }>;
   const images =
     columns === summaryColumns || !typedRows.length
       ? []
       : await getDb()
           .prepare(
-            `SELECT id,notice_id FROM notice_images WHERE notice_id IN (${typedRows.map(() => "?").join(",")}) ORDER BY created_at`,
+            `SELECT id,notice_id FROM notice_image WHERE notice_id IN (${typedRows.map(() => "?").join(",")}) ORDER BY gmt_create`,
           )
           .all(...typedRows.map((notice) => notice.id));
   const notices = typedRows.map((notice) => ({
@@ -30,13 +56,15 @@ export async function GET(request: Request) {
       .filter((image) => image.notice_id === notice.id)
       .map((image) => ({ id: image.id })),
   }));
-  return Response.json({ notices });
+  return Response.json({ notices, nextPage: rows.length > pageSize ? page + 1 : null });
 }
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return jsonError("Invalid origin", 403);
   if (!(await adminUser())) return jsonError("Forbidden", 403);
   const x = await readJsonObject(request);
   if (!x) return jsonError("Invalid JSON");
+  const dates = noticeDates(x.startAt, x.endAt);
+  if ("error" in dates) return jsonError(dates.error);
   const kind = trim(x.kind, 30),
     titleEn = trim(x.titleEn, 180),
     bodyEn = trim(x.bodyEn, 3000),
@@ -64,21 +92,23 @@ export async function POST(request: Request) {
     routePath,
     pointData,
     progressPercent,
-    x.endAt,
+    dates.endAt,
   );
   if (featureError) return jsonError(featureError);
   if (clientRequestId) {
     const prior = (await getDb()
-      .prepare("SELECT id FROM notices WHERE client_request_id=?")
-      .get(clientRequestId)) as { id: string } | undefined;
-    if (prior) return Response.json({ notice: { id: prior.id, reused: true } });
+      .prepare(
+        "SELECT id,gmt_create AS createdAt,gmt_modified AS updatedAt FROM notice WHERE client_request_id=?",
+      )
+      .get(clientRequestId)) as { id: string; createdAt: string; updatedAt: string } | undefined;
+    if (prior) return reusedNotice(prior);
   }
   const now = new Date().toISOString(),
     id = crypto.randomUUID();
   try {
     await getDb()
       .prepare(
-        `INSERT INTO notices (id,kind,status,title_en,title_zh,title_ms,body_en,body_zh,body_ms,location,start_at,end_at,diversion,latitude,longitude,route_path,progress_percent,point_data,client_request_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO notice (id,kind,status,title_en,title_zh,title_ms,body_en,body_zh,body_ms,location,start_at,end_at,diversion,latitude,longitude,route_path,progress_percent,point_data,client_request_id,gmt_create,gmt_modified) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         id,
@@ -91,8 +121,8 @@ export async function POST(request: Request) {
         trim(x.bodyZh, 3000) || null,
         trim(x.bodyMs, 3000) || null,
         location,
-        trim(x.startAt, 40) || null,
-        trim(x.endAt, 40) || null,
+        dates.startAt,
+        dates.endAt,
         trim(x.diversion, 600) || null,
         trim(x.latitude, 24) || null,
         trim(x.longitude, 24) || null,
@@ -106,19 +136,24 @@ export async function POST(request: Request) {
   } catch (error) {
     const prior = clientRequestId
       ? ((await getDb()
-          .prepare("SELECT id FROM notices WHERE client_request_id=?")
-          .get(clientRequestId)) as { id: string } | undefined)
+          .prepare(
+            "SELECT id,gmt_create AS createdAt,gmt_modified AS updatedAt FROM notice WHERE client_request_id=?",
+          )
+          .get(clientRequestId)) as
+          { id: string; createdAt: string; updatedAt: string } | undefined)
       : undefined;
-    if (prior) return Response.json({ notice: { id: prior.id, reused: true } });
+    if (prior) return reusedNotice(prior);
     throw error;
   }
-  return Response.json({ notice: { id } }, { status: 201 });
+  return Response.json({ notice: { id, updatedAt: now } }, { status: 201 });
 }
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return jsonError("Invalid origin", 403);
   if (!(await adminUser())) return jsonError("Forbidden", 403);
   const x = await readJsonObject(request);
   if (!x) return jsonError("Invalid JSON");
+  const dates = noticeDates(x.startAt, x.endAt);
+  if ("error" in dates) return jsonError(dates.error);
   const id = trim(x.id, 60),
     kind = trim(x.kind, 30),
     status = trim(x.status, 20),
@@ -128,8 +163,15 @@ export async function PATCH(request: Request) {
     routePath = validRoutePath(x.routePath),
     progressPercent = validProgress(x.progressPercent),
     pointData = validPointData(x.pointData);
-  if (!(await getDb().prepare("SELECT 1 FROM notices WHERE id=?").get(id)))
+  if (!(await getDb().prepare("SELECT 1 FROM notice WHERE id=?").get(id)))
     return jsonError("Notice not found", 404);
+  const expectedUpdatedAt = trim(x.updatedAt, 30);
+  if (!expectedUpdatedAt) return jsonError("Reload the saved notice before editing it", 428);
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(expectedUpdatedAt) ||
+    !Number.isFinite(Date.parse(expectedUpdatedAt))
+  )
+    return jsonError("Invalid notice version");
   if (
     !validKinds.includes(kind as never) ||
     !["draft", "published", "archived"].includes(status) ||
@@ -147,12 +189,14 @@ export async function PATCH(request: Request) {
     routePath,
     pointData,
     progressPercent,
-    x.endAt,
+    dates.endAt,
   );
   if (featureError) return jsonError(featureError);
-  await getDb()
+  // Advance even for two saves in the same millisecond or hosts with clock skew.
+  const updatedAt = new Date(Math.max(Date.now(), Date.parse(expectedUpdatedAt) + 1)).toISOString();
+  const result = await getDb()
     .prepare(
-      `UPDATE notices SET kind=?,status=?,title_en=?,title_zh=?,title_ms=?,body_en=?,body_zh=?,body_ms=?,location=?,start_at=?,end_at=?,diversion=?,latitude=?,longitude=?,route_path=?,progress_percent=?,point_data=?,updated_at=? WHERE id=?`,
+      `UPDATE notice SET kind=?,status=?,title_en=?,title_zh=?,title_ms=?,body_en=?,body_zh=?,body_ms=?,location=?,start_at=?,end_at=?,diversion=?,latitude=?,longitude=?,route_path=?,progress_percent=?,point_data=?,gmt_modified=? WHERE id=? AND gmt_modified=?`,
     )
     .run(
       kind,
@@ -164,18 +208,33 @@ export async function PATCH(request: Request) {
       trim(x.bodyZh, 3000) || null,
       trim(x.bodyMs, 3000) || null,
       location,
-      trim(x.startAt, 40) || null,
-      trim(x.endAt, 40) || null,
+      dates.startAt,
+      dates.endAt,
       trim(x.diversion, 600) || null,
       trim(x.latitude, 24) || null,
       trim(x.longitude, 24) || null,
       routePath,
       kind === "schedule" ? progressPercent : null,
       kind === "business" || kind === "transport" || kind === "safety" ? pointData : null,
-      new Date().toISOString(),
+      updatedAt,
       id,
+      expectedUpdatedAt,
     );
-  return Response.json({ ok: true });
+  if (result.affectedRows !== 1)
+    return jsonError(
+      "This notice was changed by someone else. Reload the saved version before retrying.",
+      409,
+    );
+  return Response.json({ ok: true, notice: { id, updatedAt } });
+}
+
+function reusedNotice(prior: { id: string; createdAt: string; updatedAt: string }) {
+  if (prior.createdAt !== prior.updatedAt)
+    return jsonError(
+      "This notice has already been changed. Open the saved notice to continue.",
+      409,
+    );
+  return Response.json({ notice: { id: prior.id, updatedAt: prior.updatedAt, reused: true } });
 }
 
 function validRoutePath(value: unknown) {

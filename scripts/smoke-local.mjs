@@ -1,3 +1,5 @@
+import sharp from "sharp";
+import { runBackendRegressions } from "./backend-regressions.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import nextEnv from "@next/env";
@@ -25,10 +27,9 @@ const password = "SharedTest!2026";
 let noticeId = "",
   reportReference = "",
   uploadId = "";
-const png = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=",
-  "base64",
-);
+const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } })
+  .png()
+  .toBuffer();
 async function request(host, route, { cookie = "", json, ...options } = {}) {
   const headers = { Origin: host, ...options.headers };
   if (cookie) headers.Cookie = cookie;
@@ -46,10 +47,26 @@ async function checkImage(host, route, cookie) {
   assert.equal(r.status, 200);
   assert.deepEqual(Buffer.from(await r.arrayBuffer()), png);
 }
+async function checkTeamSetup(host, available) {
+  const [auth, admin, page] = await Promise.all([
+    request(host, "/api/auth"),
+    request(host, "/api/admin"),
+    fetch(host + "/team/login"),
+  ]);
+  assert.equal(auth.body.teamSetupAvailable, available, "Auth API reports team setup availability");
+  assert.equal(admin.body.needsSetup, available, "Admin API reports team setup availability");
+  assert.equal(page.status, 200, "Team login page renders successfully");
+  assert.equal(
+    (await page.text()).includes('name="setupKey"'),
+    available,
+    "Team login page shows setup only before the first team account exists",
+  );
+}
 try {
   // Require a fresh isolated database; both website processes must use these test credentials.
   const [existing] = await db.query("SELECT COUNT(*) AS count FROM app_user WHERE role='team'");
   assert.equal(Number(existing[0].count), 0, "Use a fresh test database with no team accounts");
+  for (const host of [base, second]) await checkTeamSetup(host, true);
   const registeredAuthority = await request(base, "/api/auth", {
     method: "POST",
     json: {
@@ -95,6 +112,7 @@ try {
   });
   const [teamRows] = await db.query("SELECT id FROM app_user WHERE email=?", [teamEmail]);
   assert.equal(teamRows.length, 1, "First website must point to this test database");
+  for (const host of [base, second]) await checkTeamSetup(host, false);
   const resident = await request(second, "/api/auth", {
     method: "POST",
     json: { action: "register", name: "共享测试居民", email: residentEmail, password },
@@ -182,6 +200,7 @@ try {
   );
   assert.equal((await fetch(second + `/api/notices/images?id=${uploadId}`)).status, 403);
   const form = new FormData();
+  form.set("contactEmail", residentEmail);
   form.set("kind", "safety");
   form.set("location", "QA shared location");
   form.set("description", "A report created on the second website instance.");
@@ -230,6 +249,20 @@ try {
       .status,
     200,
   );
+  await runBackendRegressions({
+    db,
+    base,
+    second,
+    team,
+    resident,
+    authority,
+    notice,
+    noticeId,
+    version: created.body.notice.updatedAt,
+    report: report.body,
+    stamp,
+    password,
+  });
   await request(second, `/api/notices/images?id=${uploadId}`, {
     cookie: authority.cookie,
     method: "DELETE",

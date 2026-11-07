@@ -18,6 +18,8 @@ export const issueKinds = [
 
 export const words: Record<Locale, Record<string, string>> = {
   en: {
+    loadMoreNotices: "Load more notices",
+    reloadSavedNotice: "Reload saved notice",
     brand: "Mutiara Line Community Desk",
     navHome: "Home",
     navNotices: "Updates",
@@ -142,6 +144,8 @@ export const words: Record<Locale, Record<string, string>> = {
     alertsSignInBody: "Sign in to save the types of updates you want to follow.",
   },
   zh: {
+    loadMoreNotices: "加载更多公告",
+    reloadSavedNotice: "重新载入已保存的公告",
     brand: "珍珠线社区信息站",
     navHome: "首页",
     navNotices: "施工公告",
@@ -256,6 +260,8 @@ export const words: Record<Locale, Record<string, string>> = {
     alertsSignInBody: "登录后可保存你关注的公告类别。",
   },
   ms: {
+    loadMoreNotices: "Muatkan lagi makluman",
+    reloadSavedNotice: "Muat semula makluman tersimpan",
     brand: "Meja Komuniti Laluan Mutiara",
     navHome: "Utama",
     navNotices: "Makluman",
