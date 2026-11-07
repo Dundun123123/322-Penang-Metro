@@ -1,7 +1,10 @@
-import { NextResponse } from "next/server";
 import { destroySession } from "@/lib/auth";
 export const runtime = "nodejs";
-export async function GET(request: Request) {
+export async function GET() {
   await destroySession();
-  return NextResponse.redirect(new URL("/", request.url));
+  // Keep the browser's current origin instead of the server's listen address.
+  return new Response(null, {
+    status: 303,
+    headers: { Location: "/", "Cache-Control": "no-store" },
+  });
 }

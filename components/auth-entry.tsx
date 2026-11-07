@@ -181,14 +181,6 @@ export default function AuthEntry({
       setBusy(false);
     }
   }
-  async function logout() {
-    await fetch("/api/auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "logout" }),
-    });
-    window.location.href = team ? "/team/login" : authority ? "/authority/login" : "/";
-  }
   return (
     <main className={`auth-page ${team || authority ? "auth-team" : "auth-community"}`}>
       <div className="auth-top">
@@ -241,9 +233,9 @@ export default function AuthEntry({
                 <a className="button button-primary" href={continueHref}>
                   {c.continue}
                 </a>
-                <button className="auth-secondary auth-button-link" onClick={logout}>
+                <a className="auth-secondary auth-button-link" href="/logout">
                   {c.logout}
-                </button>
+                </a>
               </>
             ) : (
               <form className="local-login-form" onSubmit={submit}>

@@ -341,6 +341,26 @@ try {
     ).status,
     404,
   );
+  // Every role signs out to the current site's home, including LAN/custom hosts.
+  for (const [index, account] of [resident, team, authority].entries()) {
+    const host = index % 2 ? base : second;
+    const response = await fetch(host + "/logout", {
+      headers: { Cookie: account.cookie },
+      redirect: "manual",
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get("location"), "/");
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.match(response.headers.get("set-cookie") || "", /mutiara_session=;.*Max-Age=0/i);
+    assert.equal(
+      (await request(index % 2 ? second : base, "/api/auth", { cookie: account.cookie })).body.user,
+      null,
+      "Signing out revokes the shared session on every website instance",
+    );
+    const home = await fetch(new URL(response.headers.get("location"), host));
+    assert.equal(home.status, 200);
+    assert.equal(new URL(home.url).origin, host);
+  }
   console.log(
     "PASS: two instances share accounts, sessions, roles, notices, idempotency, images, reports, events, subscriptions and detail pages.",
   );
