@@ -1396,6 +1396,36 @@ footer a {
   height: 390px;
   z-index: 1;
 }
+.route-map-frame {
+  position: relative;
+}
+.route-map-status {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  left: 52px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: white;
+  color: var(--deep);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px #173b5e1a;
+  font-size: 13px;
+}
+.route-map-status button {
+  flex: none;
+  border: 1px solid var(--navy);
+  border-radius: 3px;
+  background: white;
+  color: var(--navy);
+  padding: 5px 10px;
+  font-weight: 700;
+}
 .route-editor .route-map-canvas {
   height: 350px;
   cursor: crosshair;

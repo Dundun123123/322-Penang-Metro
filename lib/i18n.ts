@@ -18,6 +18,9 @@ export const issueKinds = [
 
 export const words: Record<Locale, Record<string, string>> = {
   en: {
+    mapLoading: "Loading map background…",
+    mapUnavailable: "The map background could not load. Marked locations are still shown.",
+    retryMap: "Retry map",
     loadMoreNotices: "Load more notices",
     reloadSavedNotice: "Reload saved notice",
     brand: "Mutiara Line Community Desk",
@@ -144,6 +147,9 @@ export const words: Record<Locale, Record<string, string>> = {
     alertsSignInBody: "Sign in to save the types of updates you want to follow.",
   },
   zh: {
+    mapLoading: "正在加载地图底图…",
+    mapUnavailable: "地图底图暂时无法加载，已标记的地点仍会保留。",
+    retryMap: "重新加载",
     loadMoreNotices: "加载更多公告",
     reloadSavedNotice: "重新载入已保存的公告",
     brand: "珍珠线社区信息站",
@@ -260,6 +266,9 @@ export const words: Record<Locale, Record<string, string>> = {
     alertsSignInBody: "登录后可保存你关注的公告类别。",
   },
   ms: {
+    mapLoading: "Memuatkan peta latar…",
+    mapUnavailable: "Peta latar tidak dapat dimuatkan. Lokasi bertanda masih dipaparkan.",
+    retryMap: "Cuba semula",
     loadMoreNotices: "Muatkan lagi makluman",
     reloadSavedNotice: "Muat semula makluman tersimpan",
     brand: "Meja Komuniti Laluan Mutiara",

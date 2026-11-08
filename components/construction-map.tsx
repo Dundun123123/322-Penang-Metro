@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { LayerGroup, Map as LeafletMap } from "leaflet";
 import type { ConstructionRoutes, RoutePoint } from "@/lib/route-path";
+import { installMapTiles, type BasemapStatus } from "@/lib/map-tiles";
+import { useLocale } from "@/lib/use-locale";
 import {
   getTransportStops,
   hasCoordinates,
@@ -217,7 +219,9 @@ export default function ConstructionMap({
   onPointsChange,
   labels,
 }: Props) {
+  const { t } = useLocale();
   const container = useRef<HTMLDivElement>(null);
+  const basemap = useRef<ReturnType<typeof installMapTiles> | null>(null);
   const map = useRef<LeafletMap | null>(null);
   const drawings = useRef<LayerGroup | null>(null);
   const routesRef = useRef(routes);
@@ -237,6 +241,7 @@ export default function ConstructionMap({
   );
   const initialCoordinates = useRef({ latitude, longitude });
   const [ready, setReady] = useState(false);
+  const [basemapStatus, setBasemapStatus] = useState<BasemapStatus>("loading");
   const [activeBranch, setActiveBranch] = useState(0);
   const [activeTool, setActiveTool] = useState<MapTool>(
     markerMode === "none"
@@ -277,6 +282,8 @@ export default function ConstructionMap({
   useEffect(() => {
     if (!container.current || map.current) return;
     let active = true;
+    let resizeObserver: ResizeObserver | undefined;
+    let resizeFrame = 0;
     import("leaflet").then((L) => {
       if (!active || !container.current) return;
       const marker = markerPoints(pointsRef.current, markerMode).find(hasCoordinates);
@@ -296,10 +303,9 @@ export default function ConstructionMap({
         centre,
         first ? 16 : 13,
       );
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "© OpenStreetMap contributors",
-      }).addTo(instance);
+      basemap.current = installMapTiles(L, instance, (status) => {
+        if (active) setBasemapStatus(status);
+      });
       const group = L.layerGroup().addTo(instance);
       if (editable)
         instance.on("click", (event) => {
@@ -357,10 +363,35 @@ export default function ConstructionMap({
           );
         }
       });
+      resizeObserver = new ResizeObserver(() => {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(() => {
+          if (!active || map.current !== instance) return;
+          instance.invalidateSize({ pan: false });
+          if (!editable)
+            showRoutes(
+              L,
+              instance,
+              group,
+              routesRef.current,
+              pointsRef.current,
+              markerMode,
+              labelsRef.current,
+              activeBranchRef.current,
+              editable,
+              true,
+            );
+        });
+      });
+      resizeObserver.observe(container.current);
       setReady(true);
     });
     return () => {
       active = false;
+      resizeObserver?.disconnect();
+      cancelAnimationFrame(resizeFrame);
+      basemap.current?.destroy();
+      basemap.current = null;
       map.current?.remove();
       map.current = null;
       drawings.current = null;
@@ -616,7 +647,19 @@ export default function ConstructionMap({
             </button>
           </div>
         )}
-      <div ref={container} className="route-map-canvas" />
+      <div className="route-map-frame">
+        <div ref={container} className="route-map-canvas" />
+        {basemapStatus !== "ready" && (
+          <div className="route-map-status" role="status" aria-live="polite">
+            <span>{t(basemapStatus === "error" ? "mapUnavailable" : "mapLoading")}</span>
+            {basemapStatus === "error" && (
+              <button type="button" onClick={() => basemap.current?.retry()}>
+                {t("retryMap")}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       {editable &&
         markerMode !== "transport" &&
         markerMode !== "safety" &&

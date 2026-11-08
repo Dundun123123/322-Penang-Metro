@@ -16,7 +16,8 @@
     "db:check": "node scripts/check-db.mjs",
     "registration:setup": "node scripts/setup-registration.mjs",
     "test:shared": "node scripts/smoke-local.mjs",
-    "test:isolated": "node scripts/test-isolated-mysql.mjs"
+    "test:isolated": "node scripts/test-isolated-mysql.mjs",
+    "test:map": "node --experimental-strip-types --test scripts/map-tiles.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

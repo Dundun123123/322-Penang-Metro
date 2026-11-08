@@ -59,6 +59,9 @@ jobs:
       - name: Check TypeScript
         run: npm run typecheck
 
+      - name: Verify map loading recovery
+        run: npm run test:map
+
       - name: Build application
         run: npm run build
 
